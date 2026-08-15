@@ -4,12 +4,17 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
+import { Select } from '../../components/ui/Select';
 import { Spinner } from '../../components/ui/Spinner';
 import { useToast } from '../../components/ui/Toast';
-import { ApiError, apiBlobRequest, apiRequest } from '../../lib/api';
-import { triggerBlobDownload } from '../../lib/download';
-import type { CertificateSummary } from '../../lib/types';
+import { ApiError, apiBlobRequest, apiRequest, buildQueryString } from '../../lib/api';
+import { openBlobInNewTab, triggerBlobDownload } from '../../lib/download';
+import { useDebouncedValue } from '../../lib/useDebouncedValue';
+import type { CertificateStatus, CertificateSummary, ParticipantSummary } from '../../lib/types';
+
+type PreviewPosition = 'first' | 'random' | 'last';
 
 interface CertificatesTabProps {
   eventId: string;
@@ -26,10 +31,22 @@ export function CertificatesTab({ eventId }: CertificatesTabProps): JSX.Element 
   const { showToast } = useToast();
   const [lastResult, setLastResult] = useState<BatchGenerateResult | null>(null);
   const [detailCertificate, setDetailCertificate] = useState<CertificateSummary | null>(null);
+  const [searchInput, setSearchInput] = useState('');
+  const [status, setStatus] = useState<CertificateStatus | ''>('');
+  const [sort, setSort] = useState('newest');
+  const search = useDebouncedValue(searchInput, 300);
 
   const certificatesQuery = useQuery({
-    queryKey: ['events', eventId, 'certificates'],
-    queryFn: () => apiRequest<{ certificates: CertificateSummary[] }>(`/events/${eventId}/certificates`),
+    queryKey: ['events', eventId, 'certificates', { search, status, sort }],
+    queryFn: () =>
+      apiRequest<{ certificates: CertificateSummary[] }>(
+        `/events/${eventId}/certificates${buildQueryString({ search, status, sort })}`,
+      ),
+  });
+
+  const participantsQuery = useQuery({
+    queryKey: ['events', eventId, 'participants'],
+    queryFn: () => apiRequest<{ participants: ParticipantSummary[] }>(`/events/${eventId}/participants`),
   });
 
   const generateMutation = useMutation({
@@ -70,6 +87,17 @@ export function CertificatesTab({ eventId }: CertificatesTabProps): JSX.Element 
     },
   });
 
+  const exportMutation = useMutation({
+    mutationFn: () =>
+      apiBlobRequest(`/events/${eventId}/certificates/export.csv${buildQueryString({ search, status, sort })}`),
+    onSuccess: (blob) => {
+      triggerBlobDownload(blob, 'certificates.csv');
+    },
+    onError: (error: unknown) => {
+      showToast(error instanceof ApiError ? error.message : 'Could not export certificates', 'error');
+    },
+  });
+
   const revokeMutation = useMutation({
     mutationFn: (certificateRecordId: string) =>
       apiRequest(`/events/${eventId}/certificates/${certificateRecordId}/revoke`, { method: 'PATCH' }),
@@ -82,7 +110,38 @@ export function CertificatesTab({ eventId }: CertificatesTabProps): JSX.Element 
     },
   });
 
+  const previewSampleMutation = useMutation({
+    mutationFn: (participant: ParticipantSummary) =>
+      apiBlobRequest(`/events/${eventId}/certificates/test`, {
+        method: 'POST',
+        body: { certificateTypeId: participant.certificateTypeId, participantId: participant.id },
+      }),
+    onSuccess: (blob) => {
+      openBlobInNewTab(blob);
+    },
+    onError: (error: unknown) => {
+      showToast(error instanceof ApiError ? error.message : 'Could not generate a preview', 'error');
+    },
+  });
+
   const certificates = certificatesQuery.data?.certificates ?? [];
+  const assignedParticipants = (participantsQuery.data?.participants ?? []).filter(
+    (participant) => participant.certificateTypeId,
+  );
+  const hasActiveFilters = Boolean(search || status);
+
+  function previewSample(position: PreviewPosition): void {
+    if (assignedParticipants.length === 0) {
+      return;
+    }
+    const participant =
+      position === 'first'
+        ? assignedParticipants[0]
+        : position === 'last'
+          ? assignedParticipants[assignedParticipants.length - 1]
+          : assignedParticipants[Math.floor(Math.random() * assignedParticipants.length)];
+    previewSampleMutation.mutate(participant);
+  }
 
   if (certificatesQuery.isLoading) {
     return (
@@ -102,6 +161,14 @@ export function CertificatesTab({ eventId }: CertificatesTabProps): JSX.Element 
           <Button
             variant="outline"
             disabled={certificates.length === 0}
+            isLoading={exportMutation.isPending}
+            onClick={() => exportMutation.mutate()}
+          >
+            Export CSV
+          </Button>
+          <Button
+            variant="outline"
+            disabled={certificates.length === 0}
             isLoading={zipMutation.isPending}
             onClick={() => zipMutation.mutate()}
           >
@@ -112,6 +179,43 @@ export function CertificatesTab({ eventId }: CertificatesTabProps): JSX.Element 
           </Button>
         </div>
       </div>
+
+      <div className="flex flex-wrap items-end gap-3">
+        <Input
+          label="Search"
+          placeholder="Search by name or certificate ID…"
+          value={searchInput}
+          onChange={(event) => setSearchInput(event.target.value)}
+          className="w-56"
+        />
+        <Select label="Status" value={status} onChange={(event) => setStatus(event.target.value as CertificateStatus | '')}>
+          <option value="">All statuses</option>
+          <option value="GENERATED">Generated</option>
+          <option value="REVOKED">Revoked</option>
+        </Select>
+        <Select label="Sort by" value={sort} onChange={(event) => setSort(event.target.value)}>
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
+          <option value="name">Participant name (A-Z)</option>
+        </Select>
+      </div>
+
+      {assignedParticipants.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+          <span className="text-sm text-gray-600">Preview a sample certificate before generating:</span>
+          {(['first', 'random', 'last'] as PreviewPosition[]).map((position) => (
+            <Button
+              key={position}
+              size="sm"
+              variant="outline"
+              isLoading={previewSampleMutation.isPending}
+              onClick={() => previewSample(position)}
+            >
+              {position.charAt(0).toUpperCase() + position.slice(1)}
+            </Button>
+          ))}
+        </div>
+      )}
 
       {generateMutation.isPending && (
         <div className="flex items-center gap-3 rounded-lg border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-800">
@@ -136,8 +240,12 @@ export function CertificatesTab({ eventId }: CertificatesTabProps): JSX.Element 
 
       {certificates.length === 0 ? (
         <EmptyState
-          title="No certificates yet"
-          description="Assign certificate types to participants, then generate certificates for the event."
+          title={hasActiveFilters ? 'No matching certificates' : 'No certificates yet'}
+          description={
+            hasActiveFilters
+              ? 'Try a different search term or clear the filters.'
+              : 'Assign certificate types to participants, then generate certificates for the event.'
+          }
         />
       ) : (
         <Card>

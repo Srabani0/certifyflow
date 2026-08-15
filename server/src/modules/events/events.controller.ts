@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { asyncHandler } from '../../lib/asyncHandler';
 import { AppError } from '../../errors/AppError';
-import { createEventSchema, updateEventSchema } from './events.schema';
+import { createEventSchema, listEventsQuerySchema, updateEventSchema } from './events.schema';
 import { createEvent, deleteEvent, getEvent, listEvents, updateEvent } from './events.service';
 
 function requireOrganizationId(req: Request): string {
@@ -20,7 +20,8 @@ export const create = asyncHandler(async (req: Request, res: Response) => {
 
 export const list = asyncHandler(async (req: Request, res: Response) => {
   const organizationId = requireOrganizationId(req);
-  const events = await listEvents(organizationId);
+  const query = listEventsQuerySchema.parse(req.query);
+  const events = await listEvents(organizationId, query);
   res.status(200).json({ events });
 });
 

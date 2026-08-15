@@ -2,6 +2,7 @@ import type { CertificateTemplate, CertificateType } from '@prisma/client';
 import QRCode from 'qrcode';
 import { env } from '../../config/env';
 import { getBrowser } from '../../lib/browser';
+import { sanitizeMetadataFields } from '../../lib/participantFields';
 import { renderTemplate, type TemplateContext } from '../../lib/templateEngine';
 
 export interface SignatoryContext {
@@ -13,10 +14,15 @@ export interface SignatoryContext {
 
 export interface CertificateRenderInput {
   organizationName: string;
+  organizationLogoUrl?: string | null;
   eventName: string;
+  eventVenue?: string | null;
+  eventStartDate?: Date | null;
+  eventEndDate?: Date | null;
   certificateType: Pick<CertificateType, 'title' | 'description' | 'signatories'>;
   template: Pick<CertificateTemplate, 'htmlContent' | 'cssContent'>;
   participantName: string;
+  participantMetadata?: unknown;
   certificateId: string;
   issuedAt: Date;
 }
@@ -49,14 +55,31 @@ export async function buildCertificateHtml(input: CertificateRenderInput): Promi
   const verifyUrl = buildVerifyUrl(input.certificateId);
   const qrCodeDataUrl = await QRCode.toDataURL(verifyUrl, { margin: 1, width: 240 });
 
-  const context: TemplateContext = {
+  // Personalization pass: lets a certificate type's title/description reference
+  // per-participant CSV columns (e.g. "for securing {{position}} in {{eventName}}")
+  // before those resolved strings become the outer template's certificateTitle/Subtitle.
+  const personalizationContext: TemplateContext = {
+    ...sanitizeMetadataFields(input.participantMetadata),
+    participantName: input.participantName,
     organizationName: input.organizationName,
     eventName: input.eventName,
-    certificateTitle: input.certificateType.title,
-    certificateSubtitle: input.certificateType.description ?? undefined,
-    participantName: input.participantName,
+    eventVenue: input.eventVenue ?? undefined,
+    eventStartDate: input.eventStartDate ? formatDate(input.eventStartDate) : undefined,
+    eventEndDate: input.eventEndDate ? formatDate(input.eventEndDate) : undefined,
     issueDate: formatDate(input.issuedAt),
     certificateId: input.certificateId,
+  };
+
+  const certificateTitle = renderTemplate(input.certificateType.title, personalizationContext);
+  const certificateSubtitle = input.certificateType.description
+    ? renderTemplate(input.certificateType.description, personalizationContext)
+    : undefined;
+
+  const context: TemplateContext = {
+    ...personalizationContext,
+    organizationLogoUrl: input.organizationLogoUrl ?? undefined,
+    certificateTitle,
+    certificateSubtitle,
     verifyUrl,
     qrCodeDataUrl,
     signatories: parseSignatories(input.certificateType.signatories),

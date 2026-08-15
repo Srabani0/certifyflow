@@ -13,5 +13,13 @@ export const createEventSchema = z.object({
 
 export const updateEventSchema = createEventSchema.partial();
 
+export const listEventsQuerySchema = z.object({
+  search: z.string().trim().min(1).optional(),
+  status: z.nativeEnum(EventStatus).optional(),
+  type: z.nativeEnum(EventType).optional(),
+  sort: z.enum(['newest', 'oldest', 'name']).default('newest'),
+});
+
 export type CreateEventInput = z.infer<typeof createEventSchema>;
 export type UpdateEventInput = z.infer<typeof updateEventSchema>;
+export type ListEventsQuery = z.infer<typeof listEventsQuerySchema>;

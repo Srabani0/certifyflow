@@ -38,15 +38,19 @@ enum CertificateStatus {
 }
 
 model Organization {
-  id           String   @id @default(cuid())
-  name         String
-  slug         String   @unique
-  email        String   @unique
-  passwordHash String   @map("password_hash")
-  logoUrl      String?  @map("logo_url")
-  website      String?
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id                  String   @id @default(cuid())
+  name                String
+  slug                String   @unique
+  email               String   @unique
+  passwordHash        String   @map("password_hash")
+  logoUrl             String?  @map("logo_url")
+  website             String?
+  brandColor          String?  @map("brand_color")
+  address             String?
+  phone               String?
+  certificateIdPrefix String   @default("CF") @map("certificate_id_prefix")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
 
   events       Event[]
   certificates Certificate[]

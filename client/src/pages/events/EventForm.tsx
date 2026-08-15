@@ -15,7 +15,7 @@ export interface EventFormValues {
   location?: string;
 }
 
-const EVENT_TYPES: EventType[] = [
+export const EVENT_TYPES: EventType[] = [
   'FEST',
   'HACKATHON',
   'WORKSHOP',
@@ -26,9 +26,9 @@ const EVENT_TYPES: EventType[] = [
   'TRAINING',
   'OTHER',
 ];
-const EVENT_STATUSES: EventStatus[] = ['DRAFT', 'ACTIVE', 'COMPLETED', 'ARCHIVED'];
+export const EVENT_STATUSES: EventStatus[] = ['DRAFT', 'ACTIVE', 'COMPLETED', 'ARCHIVED'];
 
-function toTitleCase(value: string): string {
+export function toTitleCase(value: string): string {
   return value.charAt(0) + value.slice(1).toLowerCase();
 }
 

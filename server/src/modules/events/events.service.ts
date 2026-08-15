@@ -1,7 +1,7 @@
-import type { Event } from '@prisma/client';
+import type { Event, Prisma } from '@prisma/client';
 import { AppError } from '../../errors/AppError';
 import { prisma } from '../../lib/prisma';
-import type { CreateEventInput, UpdateEventInput } from './events.schema';
+import type { CreateEventInput, ListEventsQuery, UpdateEventInput } from './events.schema';
 
 export async function getOwnedEventOrThrow(organizationId: string, eventId: string): Promise<Event> {
   const event = await prisma.event.findUnique({ where: { id: eventId } });
@@ -26,10 +26,18 @@ export function createEvent(organizationId: string, input: CreateEventInput): Pr
   });
 }
 
-export function listEvents(organizationId: string) {
+export function listEvents(organizationId: string, query: ListEventsQuery) {
+  const orderBy: Prisma.EventOrderByWithRelationInput =
+    query.sort === 'name' ? { name: 'asc' } : query.sort === 'oldest' ? { createdAt: 'asc' } : { createdAt: 'desc' };
+
   return prisma.event.findMany({
-    where: { organizationId },
-    orderBy: { createdAt: 'desc' },
+    where: {
+      organizationId,
+      ...(query.search && { name: { contains: query.search, mode: 'insensitive' } }),
+      ...(query.status && { status: query.status }),
+      ...(query.type && { type: query.type }),
+    },
+    orderBy,
     include: { _count: { select: { participants: true, certificates: true } } },
   });
 }

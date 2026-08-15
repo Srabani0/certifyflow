@@ -94,6 +94,20 @@ export interface CsvImportResult {
   errors: { row: number; reason: string }[];
 }
 
+export interface CsvPreviewResult {
+  headers: string[];
+  suggestedMapping: { nameColumn?: string; emailColumn?: string; categoryColumn?: string };
+  rows: Record<string, string>[];
+  totalRows: number;
+  certificateTypes: { id: string; name: string }[];
+}
+
+export interface CsvMapping {
+  nameColumn: string;
+  emailColumn?: string;
+  categoryColumn?: string;
+}
+
 export interface VerifiedCertificateInfo {
   certificateId: string;
   participantName: string;

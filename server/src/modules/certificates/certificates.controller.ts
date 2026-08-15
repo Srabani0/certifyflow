@@ -1,9 +1,15 @@
 import type { Request, Response } from 'express';
 import { asyncHandler } from '../../lib/asyncHandler';
 import { AppError } from '../../errors/AppError';
-import { batchGenerateSchema, downloadZipSchema, testCertificateSchema } from './certificates.schema';
+import {
+  batchGenerateSchema,
+  downloadZipSchema,
+  listCertificatesQuerySchema,
+  testCertificateSchema,
+} from './certificates.schema';
 import {
   batchGenerateCertificates,
+  exportCertificatesCsv,
   generateTestCertificate,
   getCertificatePdfBuffer,
   listCertificates,
@@ -36,8 +42,18 @@ export const generate = asyncHandler(async (req: Request, res: Response) => {
 
 export const list = asyncHandler(async (req: Request, res: Response) => {
   const organizationId = requireOrganizationId(req);
-  const certificates = await listCertificates(organizationId, req.params.eventId);
+  const query = listCertificatesQuerySchema.parse(req.query);
+  const certificates = await listCertificates(organizationId, req.params.eventId, query);
   res.status(200).json({ certificates });
+});
+
+export const exportCsv = asyncHandler(async (req: Request, res: Response) => {
+  const organizationId = requireOrganizationId(req);
+  const query = listCertificatesQuerySchema.parse(req.query);
+  const csv = await exportCertificatesCsv(organizationId, req.params.eventId, query);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="certificates.csv"');
+  res.send(csv);
 });
 
 export const download = asyncHandler(async (req: Request, res: Response) => {

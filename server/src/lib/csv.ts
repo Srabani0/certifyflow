@@ -89,3 +89,18 @@ export function csvRowsToRecords(rows: string[][]): CsvTable {
 
   return { headers, records };
 }
+
+function escapeCsvField(value: string): string {
+  if (/[",\n\r]/.test(value)) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
+export function stringifyCsv(headers: string[], rows: (string | number | null | undefined)[][]): string {
+  const lines = [headers.map(escapeCsvField).join(',')];
+  for (const row of rows) {
+    lines.push(row.map((cell) => escapeCsvField(cell === null || cell === undefined ? '' : String(cell))).join(','));
+  }
+  return lines.join('\r\n');
+}

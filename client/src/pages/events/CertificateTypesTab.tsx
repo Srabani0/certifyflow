@@ -9,7 +9,8 @@ import { Spinner } from '../../components/ui/Spinner';
 import { useToast } from '../../components/ui/Toast';
 import { ApiError, apiBlobRequest, apiRequest } from '../../lib/api';
 import { openBlobInNewTab } from '../../lib/download';
-import type { CertificateTemplateSummary, CertificateTypeSummary } from '../../lib/types';
+import { sanitizeFieldKey } from '../../lib/participantFields';
+import type { CertificateTemplateSummary, CertificateTypeSummary, ParticipantSummary } from '../../lib/types';
 import { CertificateTypeForm, type CertificateTypeFormValues } from './CertificateTypeForm';
 
 interface CertificateTypesTabProps {
@@ -30,6 +31,11 @@ export function CertificateTypesTab({ eventId }: CertificateTypesTabProps): JSX.
   const templatesQuery = useQuery({
     queryKey: ['certificate-templates'],
     queryFn: () => apiRequest<{ templates: CertificateTemplateSummary[] }>('/certificate-templates'),
+  });
+
+  const participantsQuery = useQuery({
+    queryKey: ['events', eventId, 'participants'],
+    queryFn: () => apiRequest<{ participants: ParticipantSummary[] }>(`/events/${eventId}/participants`),
   });
 
   const invalidate = (): void => {
@@ -93,6 +99,14 @@ export function CertificateTypesTab({ eventId }: CertificateTypesTabProps): JSX.
 
   const certificateTypes = certificateTypesQuery.data?.certificateTypes ?? [];
   const templates = templatesQuery.data?.templates ?? [];
+
+  const customFields = Array.from(
+    new Set(
+      (participantsQuery.data?.participants ?? []).flatMap((participant) =>
+        participant.metadata ? Object.keys(participant.metadata).map(sanitizeFieldKey).filter(Boolean) : [],
+      ),
+    ),
+  ).sort();
 
   if (certificateTypesQuery.isLoading || templatesQuery.isLoading) {
     return (
@@ -166,6 +180,7 @@ export function CertificateTypesTab({ eventId }: CertificateTypesTabProps): JSX.
       <Modal open={isCreateOpen} onClose={() => setIsCreateOpen(false)} title="New certificate type" size="lg">
         <CertificateTypeForm
           templates={templates}
+          customFields={customFields}
           onSubmit={(values) => createMutation.mutate(values)}
           isSubmitting={createMutation.isPending}
           submitLabel="Create certificate type"
@@ -176,6 +191,7 @@ export function CertificateTypesTab({ eventId }: CertificateTypesTabProps): JSX.
         {editingType && (
           <CertificateTypeForm
             templates={templates}
+            customFields={customFields}
             defaultValues={{
               certificateTemplateId: editingType.certificateTemplateId,
               name: editingType.name,

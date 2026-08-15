@@ -1,17 +1,19 @@
-import type { Certificate, Organization } from '@prisma/client';
+import type { Certificate, Organization, Prisma } from '@prisma/client';
 import archiver from 'archiver';
 import type { Response } from 'express';
 import { AppError } from '../../errors/AppError';
 import { generateCertificateId } from '../../lib/certificateId';
+import { stringifyCsv } from '../../lib/csv';
 import { prisma } from '../../lib/prisma';
 import { readFile, saveFile } from '../../lib/storage';
 import { getOwnedCertificateTypeOrThrow } from '../certificateTypes/certificateTypes.service';
 import { getOwnedEventOrThrow } from '../events/events.service';
+import type { ListCertificatesQuery } from './certificates.schema';
 import { renderCertificatePdf } from './pdf.service';
 
-async function generateUniqueCertificateId(): Promise<string> {
+async function generateUniqueCertificateId(prefix: string): Promise<string> {
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const candidate = generateCertificateId();
+    const candidate = generateCertificateId(prefix);
     // eslint-disable-next-line no-await-in-loop
     const existing = await prisma.certificate.findUnique({
       where: { certificateId: candidate },
@@ -28,6 +30,7 @@ interface ParticipantForGeneration {
   id: string;
   fullName: string;
   certificateTypeId: string | null;
+  metadata: unknown;
 }
 
 interface GenerateForParticipantResult {
@@ -37,8 +40,8 @@ interface GenerateForParticipantResult {
 }
 
 async function generateForParticipant(
-  organization: Pick<Organization, 'id' | 'name'>,
-  event: { id: string; name: string },
+  organization: Pick<Organization, 'id' | 'name' | 'logoUrl' | 'certificateIdPrefix'>,
+  event: { id: string; name: string; location: string | null; startDate: Date | null; endDate: Date | null },
   participant: ParticipantForGeneration,
 ): Promise<GenerateForParticipantResult> {
   if (!participant.certificateTypeId) {
@@ -58,15 +61,20 @@ async function generateForParticipant(
     return { participantId: participant.id, skippedReason: 'Certificate type no longer exists' };
   }
 
-  const certificateId = await generateUniqueCertificateId();
+  const certificateId = await generateUniqueCertificateId(organization.certificateIdPrefix);
   const issuedAt = new Date();
 
   const pdfBuffer = await renderCertificatePdf({
     organizationName: organization.name,
+    organizationLogoUrl: organization.logoUrl,
     eventName: event.name,
+    eventVenue: event.location,
+    eventStartDate: event.startDate,
+    eventEndDate: event.endDate,
     certificateType,
     template: certificateType.certificateTemplate,
     participantName: participant.fullName,
+    participantMetadata: participant.metadata,
     certificateId,
     issuedAt,
   });
@@ -139,34 +147,79 @@ export async function generateTestCertificate(
   });
 
   let participantName = 'Jordan Sample';
+  let participantMetadata: unknown = undefined;
   if (participantId) {
     const participant = await prisma.participant.findUnique({ where: { id: participantId } });
     if (participant && participant.eventId === eventId) {
       participantName = participant.fullName;
+      participantMetadata = participant.metadata;
     }
   }
 
   return renderCertificatePdf({
     organizationName: organization.name,
+    organizationLogoUrl: organization.logoUrl,
     eventName: event.name,
+    eventVenue: event.location,
+    eventStartDate: event.startDate,
+    eventEndDate: event.endDate,
     certificateType,
     template,
     participantName,
+    participantMetadata,
     certificateId: 'TEST-PREVIEW',
     issuedAt: new Date(),
   });
 }
 
-export async function listCertificates(organizationId: string, eventId: string) {
+export async function listCertificates(organizationId: string, eventId: string, query: ListCertificatesQuery) {
   await getOwnedEventOrThrow(organizationId, eventId);
+
+  const orderBy: Prisma.CertificateOrderByWithRelationInput =
+    query.sort === 'name'
+      ? { participant: { fullName: 'asc' } }
+      : query.sort === 'oldest'
+        ? { issuedAt: 'asc' }
+        : { issuedAt: 'desc' };
+
   return prisma.certificate.findMany({
-    where: { eventId },
-    orderBy: { issuedAt: 'desc' },
+    where: {
+      eventId,
+      ...(query.status && { status: query.status }),
+      ...(query.search && {
+        OR: [
+          { certificateId: { contains: query.search, mode: 'insensitive' } },
+          { participant: { fullName: { contains: query.search, mode: 'insensitive' } } },
+        ],
+      }),
+    },
+    orderBy,
     include: {
       participant: { select: { id: true, fullName: true, email: true } },
       certificateType: { select: { id: true, name: true, title: true } },
     },
   });
+}
+
+export async function exportCertificatesCsv(
+  organizationId: string,
+  eventId: string,
+  query: ListCertificatesQuery,
+): Promise<string> {
+  const certificates = await listCertificates(organizationId, eventId, query);
+
+  const headers = ['Certificate ID', 'Participant Name', 'Email', 'Certificate Type', 'Status', 'Issued At', 'Verifications'];
+  const rows = certificates.map((certificate) => [
+    certificate.certificateId,
+    certificate.participant.fullName,
+    certificate.participant.email ?? '',
+    certificate.certificateType.name,
+    certificate.status,
+    certificate.issuedAt.toISOString(),
+    certificate.verificationCount,
+  ]);
+
+  return stringifyCsv(headers, rows);
 }
 
 export async function getOwnedCertificateOrThrow(

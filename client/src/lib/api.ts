@@ -1,5 +1,16 @@
 export const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api';
 
+export function buildQueryString(params: Record<string, string | undefined>): string {
+  const searchParams = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value) {
+      searchParams.set(key, value);
+    }
+  });
+  const query = searchParams.toString();
+  return query ? `?${query}` : '';
+}
+
 export class ApiError extends Error {
   status: number;
   details?: unknown;

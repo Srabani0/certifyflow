@@ -7,6 +7,7 @@ export const CERTIFICATE_HTML = `
   <div class="seal"></div>
   <div class="content">
     <div class="header">
+      {{#if organizationLogoUrl}}<img class="org-logo" src="{{organizationLogoUrl}}" alt="" />{{/if}}
       <div class="org-name">{{organizationName}}</div>
       <div class="cert-kicker">Certificate of</div>
       <div class="cert-title">{{certificateTitle}}</div>
@@ -75,6 +76,7 @@ html, body { margin: 0; padding: 0; }
   justify-content: space-between;
   text-align: center;
 }
+.org-logo { max-height: 14mm; max-width: 50mm; object-fit: contain; margin: 0 auto 2mm; display: block; }
 .org-name { font-size: 15pt; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; }
 .cert-kicker { font-size: 11pt; letter-spacing: 4px; text-transform: uppercase; margin-top: 6mm; opacity: 0.85; }
 .cert-title { font-size: 30pt; font-weight: 700; margin-top: 2mm; }

@@ -14,6 +14,7 @@ const envSchema = z.object({
   CLIENT_URL: z.string().url().default('http://localhost:5173'),
   STORAGE_DIR: z.string().default('storage'),
   PUBLIC_VERIFY_BASE_URL: z.string().url().optional(),
+  PUBLIC_SERVER_URL: z.string().url().optional(),
 });
 
 function loadEnv() {
@@ -33,4 +34,5 @@ export const env = {
     ? parsedEnv.STORAGE_DIR
     : path.resolve(process.cwd(), parsedEnv.STORAGE_DIR),
   PUBLIC_VERIFY_BASE_URL: parsedEnv.PUBLIC_VERIFY_BASE_URL ?? parsedEnv.CLIENT_URL,
+  PUBLIC_SERVER_URL: parsedEnv.PUBLIC_SERVER_URL ?? `http://localhost:${parsedEnv.PORT}`,
 };

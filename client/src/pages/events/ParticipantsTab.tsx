@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -10,8 +10,11 @@ import { Modal } from '../../components/ui/Modal';
 import { Select } from '../../components/ui/Select';
 import { Spinner } from '../../components/ui/Spinner';
 import { useToast } from '../../components/ui/Toast';
-import { ApiError, apiRequest } from '../../lib/api';
-import type { CertificateTypeSummary, CsvImportResult, ParticipantSummary } from '../../lib/types';
+import { ApiError, apiBlobRequest, apiRequest, buildQueryString } from '../../lib/api';
+import { triggerBlobDownload } from '../../lib/download';
+import { useDebouncedValue } from '../../lib/useDebouncedValue';
+import type { CertificateTypeSummary, ParticipantSummary } from '../../lib/types';
+import { CsvImportWizard } from './CsvImportWizard';
 
 interface ParticipantsTabProps {
   eventId: string;
@@ -30,13 +33,17 @@ export function ParticipantsTab({ eventId }: ParticipantsTabProps): JSX.Element 
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkCertTypeId, setBulkCertTypeId] = useState('');
-  const [csvFile, setCsvFile] = useState<File | null>(null);
-  const [importResult, setImportResult] = useState<CsvImportResult | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [searchInput, setSearchInput] = useState('');
+  const [certificateTypeFilter, setCertificateTypeFilter] = useState('');
+  const [sort, setSort] = useState('newest');
+  const search = useDebouncedValue(searchInput, 300);
 
   const participantsQuery = useQuery({
-    queryKey: ['events', eventId, 'participants'],
-    queryFn: () => apiRequest<{ participants: ParticipantSummary[] }>(`/events/${eventId}/participants`),
+    queryKey: ['events', eventId, 'participants', { search, certificateTypeFilter, sort }],
+    queryFn: () =>
+      apiRequest<{ participants: ParticipantSummary[] }>(
+        `/events/${eventId}/participants${buildQueryString({ search, certificateTypeId: certificateTypeFilter, sort })}`,
+      ),
   });
 
   const certificateTypesQuery = useQuery({
@@ -82,26 +89,6 @@ export function ParticipantsTab({ eventId }: ParticipantsTabProps): JSX.Element 
     },
   });
 
-  const importMutation = useMutation({
-    mutationFn: (file: File) => {
-      const formData = new FormData();
-      formData.append('file', file);
-      return apiRequest<CsvImportResult>(`/events/${eventId}/participants/import`, {
-        method: 'POST',
-        body: formData,
-        isFormData: true,
-      });
-    },
-    onSuccess: (result) => {
-      setImportResult(result);
-      queryClient.invalidateQueries({ queryKey: ['events', eventId, 'participants'] });
-      queryClient.invalidateQueries({ queryKey: ['events', eventId] });
-    },
-    onError: (error: unknown) => {
-      showToast(error instanceof ApiError ? error.message : 'Could not import CSV', 'error');
-    },
-  });
-
   const bulkAssignMutation = useMutation({
     mutationFn: () =>
       apiRequest(`/events/${eventId}/participants/assign-certificate-type`, {
@@ -119,20 +106,30 @@ export function ParticipantsTab({ eventId }: ParticipantsTabProps): JSX.Element 
     },
   });
 
+  const exportMutation = useMutation({
+    mutationFn: () =>
+      apiBlobRequest(
+        `/events/${eventId}/participants/export.csv${buildQueryString({ search, certificateTypeId: certificateTypeFilter, sort })}`,
+      ),
+    onSuccess: (blob) => {
+      triggerBlobDownload(blob, 'participants.csv');
+    },
+    onError: (error: unknown) => {
+      showToast(error instanceof ApiError ? error.message : 'Could not export participants', 'error');
+    },
+  });
+
   const participants = participantsQuery.data?.participants ?? [];
   const certificateTypes = certificateTypesQuery.data?.certificateTypes ?? [];
+  const hasActiveFilters = Boolean(search || certificateTypeFilter);
 
   function toggleSelected(id: string): void {
     setSelectedIds((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
   }
 
-  function closeImportModal(): void {
-    setIsImportOpen(false);
-    setCsvFile(null);
-    setImportResult(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+  function handleImported(): void {
+    queryClient.invalidateQueries({ queryKey: ['events', eventId, 'participants'] });
+    queryClient.invalidateQueries({ queryKey: ['events', eventId] });
   }
 
   if (participantsQuery.isLoading) {
@@ -150,11 +147,47 @@ export function ParticipantsTab({ eventId }: ParticipantsTabProps): JSX.Element 
           {participants.length} participant{participants.length === 1 ? '' : 's'}
         </p>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            disabled={participants.length === 0}
+            isLoading={exportMutation.isPending}
+            onClick={() => exportMutation.mutate()}
+          >
+            Export CSV
+          </Button>
           <Button variant="outline" onClick={() => setIsImportOpen(true)}>
             Import CSV
           </Button>
           <Button onClick={() => setIsAddOpen(true)}>Add participant</Button>
         </div>
+      </div>
+
+      <div className="flex flex-wrap items-end gap-3">
+        <Input
+          label="Search"
+          placeholder="Search by name or email…"
+          value={searchInput}
+          onChange={(event) => setSearchInput(event.target.value)}
+          className="w-56"
+        />
+        <Select
+          label="Certificate type"
+          value={certificateTypeFilter}
+          onChange={(event) => setCertificateTypeFilter(event.target.value)}
+        >
+          <option value="">All participants</option>
+          <option value="unassigned">Unassigned</option>
+          {certificateTypes.map((type) => (
+            <option key={type.id} value={type.id}>
+              {type.name}
+            </option>
+          ))}
+        </Select>
+        <Select label="Sort by" value={sort} onChange={(event) => setSort(event.target.value)}>
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
+          <option value="name">Name (A-Z)</option>
+        </Select>
       </div>
 
       {selectedIds.length > 0 && (
@@ -184,9 +217,13 @@ export function ParticipantsTab({ eventId }: ParticipantsTabProps): JSX.Element 
 
       {participants.length === 0 ? (
         <EmptyState
-          title="No participants yet"
-          description="Add participants manually or import them in bulk from a CSV file."
-          action={<Button onClick={() => setIsImportOpen(true)}>Import CSV</Button>}
+          title={hasActiveFilters ? 'No matching participants' : 'No participants yet'}
+          description={
+            hasActiveFilters
+              ? 'Try a different search term or clear the filters.'
+              : 'Add participants manually or import them in bulk from a CSV file.'
+          }
+          action={!hasActiveFilters && <Button onClick={() => setIsImportOpen(true)}>Import CSV</Button>}
         />
       ) : (
         <Card>
@@ -263,65 +300,12 @@ export function ParticipantsTab({ eventId }: ParticipantsTabProps): JSX.Element 
         </form>
       </Modal>
 
-      <Modal open={isImportOpen} onClose={closeImportModal} title="Import participants from CSV">
-        <div className="flex flex-col gap-4">
-          {!importResult ? (
-            <>
-              <p className="text-sm text-gray-600">
-                Upload a CSV file with a header row. We&apos;ll look for a name column (e.g. &quot;Name&quot; or
-                &quot;Full Name&quot;) and an optional email column — any other columns are kept as extra participant
-                data.
-              </p>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv,text/csv"
-                onChange={(e) => setCsvFile(e.target.files?.[0] ?? null)}
-                className="text-sm"
-              />
-              <Button
-                disabled={!csvFile}
-                isLoading={importMutation.isPending}
-                onClick={() => csvFile && importMutation.mutate(csvFile)}
-              >
-                Upload and import
-              </Button>
-            </>
-          ) : (
-            <>
-              <div className="rounded-lg bg-gray-50 p-4 text-sm">
-                <p className="font-medium text-gray-900">
-                  Imported {importResult.imported} of {importResult.totalRows} rows
-                </p>
-                {importResult.skipped > 0 && (
-                  <p className="mt-1 text-gray-600">{importResult.skipped} rows were skipped.</p>
-                )}
-              </div>
-              {importResult.errors.length > 0 && (
-                <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-200">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-gray-50 text-gray-500">
-                      <tr>
-                        <th className="px-3 py-2">Row</th>
-                        <th className="px-3 py-2">Reason</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {importResult.errors.map((error, index) => (
-                        <tr key={`${error.row}-${index}`}>
-                          <td className="px-3 py-2">{error.row}</td>
-                          <td className="px-3 py-2 text-gray-600">{error.reason}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              <Button onClick={closeImportModal}>Done</Button>
-            </>
-          )}
-        </div>
-      </Modal>
+      <CsvImportWizard
+        eventId={eventId}
+        open={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        onImported={handleImported}
+      />
     </div>
   );
 }

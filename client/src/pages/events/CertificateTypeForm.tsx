@@ -22,14 +22,27 @@ export interface CertificateTypeFormValues {
 
 interface CertificateTypeFormProps {
   templates: CertificateTemplateSummary[];
+  customFields?: string[];
   defaultValues?: Partial<CertificateTypeFormValues>;
   onSubmit: (values: CertificateTypeFormValues) => void;
   isSubmitting?: boolean;
   submitLabel?: string;
 }
 
+const BUILT_IN_FIELDS = [
+  'participantName',
+  'organizationName',
+  'eventName',
+  'eventVenue',
+  'eventStartDate',
+  'eventEndDate',
+  'issueDate',
+  'certificateId',
+];
+
 export function CertificateTypeForm({
   templates,
+  customFields = [],
   defaultValues,
   onSubmit,
   isSubmitting,
@@ -83,9 +96,33 @@ export function CertificateTypeForm({
       />
       <Textarea
         label="Description (optional)"
-        hint="e.g. has successfully completed the 3-day workshop"
+        hint="e.g. has secured {{position}} in {{eventName}}"
         {...register('description')}
       />
+
+      <div className="rounded-lg bg-gray-50 p-3 text-xs text-gray-600">
+        <p className="font-medium text-gray-700">
+          Use <code>{'{{fieldName}}'}</code> in the title or description to personalize each certificate:
+        </p>
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {BUILT_IN_FIELDS.map((field) => (
+            <code key={field} className="rounded bg-white px-1.5 py-0.5 text-gray-700 ring-1 ring-gray-200">
+              {`{{${field}}}`}
+            </code>
+          ))}
+          {customFields.map((field) => (
+            <code key={field} className="rounded bg-brand-50 px-1.5 py-0.5 text-brand-700 ring-1 ring-brand-200">
+              {`{{${field}}}`}
+            </code>
+          ))}
+        </div>
+        {customFields.length === 0 && (
+          <p className="mt-1.5 text-gray-500">
+            Extra columns from a CSV import (e.g. &quot;Team Name&quot;) will also become placeholders here, like{' '}
+            <code>{'{{teamName}}'}</code>.
+          </p>
+        )}
+      </div>
 
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">

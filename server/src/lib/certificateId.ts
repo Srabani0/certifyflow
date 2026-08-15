@@ -4,11 +4,11 @@ import { randomInt } from 'node:crypto';
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const SEGMENT_LENGTH = 10;
 
-export function generateCertificateId(date: Date = new Date()): string {
+export function generateCertificateId(prefix = 'CF', date: Date = new Date()): string {
   const year = date.getFullYear();
   let segment = '';
   for (let i = 0; i < SEGMENT_LENGTH; i += 1) {
     segment += ALPHABET[randomInt(ALPHABET.length)];
   }
-  return `CF-${year}-${segment}`;
+  return `${prefix}-${year}-${segment}`;
 }

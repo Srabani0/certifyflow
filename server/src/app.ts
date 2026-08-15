@@ -1,3 +1,4 @@
+import path from 'node:path';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express, { type Express } from 'express';
@@ -7,6 +8,7 @@ import { authRouter } from './modules/auth/auth.routes';
 import { certificateTemplatesRouter } from './modules/certificateTemplates/certificateTemplates.routes';
 import { dashboardRouter } from './modules/dashboard/dashboard.routes';
 import { eventsRouter } from './modules/events/events.routes';
+import { organizationRouter } from './modules/organization/organization.routes';
 import { verifyRouter } from './modules/verify/verify.routes';
 
 export function createApp(): Express {
@@ -29,10 +31,13 @@ export function createApp(): Express {
     res.json({ status: 'ok' });
   });
 
+  app.use('/uploads/logos', express.static(path.join(env.STORAGE_DIR, 'logos')));
+
   app.use('/api/auth', authRouter);
   app.use('/api/events', eventsRouter);
   app.use('/api/certificate-templates', certificateTemplatesRouter);
   app.use('/api/dashboard', dashboardRouter);
+  app.use('/api/organization', organizationRouter);
   app.use('/api/verify', verifyRouter);
 
   app.use(notFoundHandler);

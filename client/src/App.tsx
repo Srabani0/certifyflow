@@ -6,6 +6,7 @@ import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
 import { EventDetailPage } from './pages/events/EventDetailPage';
 import { EventsListPage } from './pages/events/EventsListPage';
+import { SettingsPage } from './pages/SettingsPage';
 import { TemplatesGalleryPage } from './pages/TemplatesGalleryPage';
 import { VerifyPage } from './pages/VerifyPage';
 
@@ -34,6 +35,7 @@ export default function App(): JSX.Element {
           <Route path="/events" element={<EventsListPage />} />
           <Route path="/events/:eventId" element={<EventDetailPage />} />
           <Route path="/templates" element={<TemplatesGalleryPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Route>
 

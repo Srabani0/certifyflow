@@ -1,14 +1,22 @@
 import type { Request, Response } from 'express';
 import { asyncHandler } from '../../lib/asyncHandler';
 import { AppError } from '../../errors/AppError';
-import { addParticipantSchema, bulkAssignCertificateTypeSchema, updateParticipantSchema } from './participants.schema';
+import {
+  addParticipantSchema,
+  bulkAssignCertificateTypeSchema,
+  confirmImportSchema,
+  listParticipantsQuerySchema,
+  updateParticipantSchema,
+} from './participants.schema';
 import {
   addParticipant,
   bulkAssignCertificateType,
+  confirmCsvImport,
   deleteParticipant,
+  exportParticipantsCsv,
   getParticipant,
-  importParticipantsFromCsv,
   listParticipants,
+  previewCsvImport,
   updateParticipant,
 } from './participants.service';
 
@@ -28,7 +36,8 @@ export const create = asyncHandler(async (req: Request, res: Response) => {
 
 export const list = asyncHandler(async (req: Request, res: Response) => {
   const organizationId = requireOrganizationId(req);
-  const participants = await listParticipants(organizationId, req.params.eventId);
+  const query = listParticipantsQuerySchema.parse(req.query);
+  const participants = await listParticipants(organizationId, req.params.eventId, query);
   res.status(200).json({ participants });
 });
 
@@ -63,11 +72,27 @@ export const bulkAssign = asyncHandler(async (req: Request, res: Response) => {
   res.status(200).json({ updated: count });
 });
 
-export const importCsv = asyncHandler(async (req: Request, res: Response) => {
+export const previewImport = asyncHandler(async (req: Request, res: Response) => {
   const organizationId = requireOrganizationId(req);
   if (!req.file) {
     throw AppError.badRequest('No CSV file was uploaded');
   }
-  const result = await importParticipantsFromCsv(organizationId, req.params.eventId, req.file.buffer);
+  const result = await previewCsvImport(organizationId, req.params.eventId, req.file.buffer);
   res.status(200).json(result);
+});
+
+export const confirmImport = asyncHandler(async (req: Request, res: Response) => {
+  const organizationId = requireOrganizationId(req);
+  const input = confirmImportSchema.parse(req.body);
+  const result = await confirmCsvImport(organizationId, req.params.eventId, input.rows, input.mapping);
+  res.status(200).json(result);
+});
+
+export const exportCsv = asyncHandler(async (req: Request, res: Response) => {
+  const organizationId = requireOrganizationId(req);
+  const query = listParticipantsQuerySchema.parse(req.query);
+  const csv = await exportParticipantsCsv(organizationId, req.params.eventId, query);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="participants.csv"');
+  res.send(csv);
 });

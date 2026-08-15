@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/events', label: 'Events' },
   { to: '/templates', label: 'Templates' },
+  { to: '/settings', label: 'Settings' },
 ];
 
 export function AppShell(): JSX.Element {

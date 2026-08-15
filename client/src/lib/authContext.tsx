@@ -9,6 +9,10 @@ export interface Organization {
   email: string;
   logoUrl: string | null;
   website: string | null;
+  brandColor: string | null;
+  address: string | null;
+  phone: string | null;
+  certificateIdPrefix: string;
   createdAt: string;
   updatedAt: string;
 }
