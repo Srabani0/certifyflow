@@ -6,7 +6,7 @@ import { Card, CardBody, CardHeader, CardTitle } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { useToast } from '../components/ui/Toast';
 import { ApiError, apiRequest } from '../lib/api';
-import { useAuth, type Organization } from '../lib/authContext';
+import { useAuth, type AuthResponse } from '../lib/authContext';
 
 interface SettingsFormValues {
   name: string;
@@ -18,7 +18,8 @@ interface SettingsFormValues {
 }
 
 export function SettingsPage(): JSX.Element {
-  const { organization } = useAuth();
+  const { organization, role } = useAuth();
+  const canEdit = role === 'OWNER' || role === 'ADMIN';
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -41,7 +42,7 @@ export function SettingsPage(): JSX.Element {
 
   const updateMutation = useMutation({
     mutationFn: (values: SettingsFormValues) =>
-      apiRequest<{ organization: Organization }>('/organization', { method: 'PATCH', body: values }),
+      apiRequest<AuthResponse>('/organization', { method: 'PATCH', body: values }),
     onSuccess: (data) => {
       queryClient.setQueryData(['auth', 'me'], data);
       showToast('Settings saved', 'success');
@@ -62,7 +63,7 @@ export function SettingsPage(): JSX.Element {
 
     setIsUploadingLogo(true);
     try {
-      const data = await apiRequest<{ organization: Organization }>('/organization/logo', {
+      const data = await apiRequest<AuthResponse>('/organization/logo', {
         method: 'POST',
         body: formData,
         isFormData: true,
@@ -99,15 +100,21 @@ export function SettingsPage(): JSX.Element {
             )}
           </div>
           <div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              onChange={handleLogoChange}
-              disabled={isUploadingLogo}
-              className="text-sm"
-            />
-            <p className="mt-1 text-xs text-gray-500">PNG, JPEG, or WEBP — appears on generated certificates.</p>
+            {canEdit ? (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={handleLogoChange}
+                  disabled={isUploadingLogo}
+                  className="text-sm"
+                />
+                <p className="mt-1 text-xs text-gray-500">PNG, JPEG, or WEBP — appears on generated certificates.</p>
+              </>
+            ) : (
+              <p className="text-xs text-gray-500">Only owners and admins can change the logo.</p>
+            )}
           </div>
         </CardBody>
       </Card>
@@ -117,37 +124,58 @@ export function SettingsPage(): JSX.Element {
           <CardTitle>Organization details</CardTitle>
         </CardHeader>
         <CardBody>
-          <form className="flex flex-col gap-4" onSubmit={handleSubmit((values) => updateMutation.mutate(values))}>
-            <Input
-              label="Organization name"
-              error={errors.name?.message}
-              {...register('name', { required: 'Name is required' })}
-            />
-            <Input
-              label="Website"
-              type="url"
-              placeholder="https://example.com"
-              error={errors.website?.message}
-              {...register('website')}
-            />
-            <div className="grid grid-cols-2 gap-4">
-              <Input label="Phone" {...register('phone')} />
-              <Input label="Brand color" type="color" className="h-10 p-1" {...register('brandColor')} />
+          {canEdit ? (
+            <form className="flex flex-col gap-4" onSubmit={handleSubmit((values) => updateMutation.mutate(values))}>
+              <Input
+                label="Organization name"
+                error={errors.name?.message}
+                {...register('name', { required: 'Name is required' })}
+              />
+              <Input
+                label="Website"
+                type="url"
+                placeholder="https://example.com"
+                error={errors.website?.message}
+                {...register('website')}
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <Input label="Phone" {...register('phone')} />
+                <Input label="Brand color" type="color" className="h-10 p-1" {...register('brandColor')} />
+              </div>
+              <Input label="Address" {...register('address')} />
+              <Input
+                label="Certificate ID prefix"
+                hint="e.g. CF, TECHFEST, NEXUS — 2-10 letters/numbers"
+                error={errors.certificateIdPrefix?.message}
+                {...register('certificateIdPrefix', {
+                  required: 'A prefix is required',
+                  pattern: { value: /^[A-Za-z0-9]{2,10}$/, message: 'Use 2-10 letters/numbers, no spaces or symbols' },
+                })}
+              />
+              <Button type="submit" isLoading={updateMutation.isPending} className="mt-2 self-start">
+                Save changes
+              </Button>
+            </form>
+          ) : (
+            <div className="flex flex-col gap-3 text-sm text-gray-700">
+              <p className="text-xs text-gray-500">Only owners and admins can edit organization settings.</p>
+              <p>
+                <span className="font-medium">Name:</span> {organization?.name}
+              </p>
+              <p>
+                <span className="font-medium">Website:</span> {organization?.website ?? '—'}
+              </p>
+              <p>
+                <span className="font-medium">Phone:</span> {organization?.phone ?? '—'}
+              </p>
+              <p>
+                <span className="font-medium">Address:</span> {organization?.address ?? '—'}
+              </p>
+              <p>
+                <span className="font-medium">Certificate ID prefix:</span> {organization?.certificateIdPrefix}
+              </p>
             </div>
-            <Input label="Address" {...register('address')} />
-            <Input
-              label="Certificate ID prefix"
-              hint="e.g. CF, TECHFEST, NEXUS — 2-10 letters/numbers"
-              error={errors.certificateIdPrefix?.message}
-              {...register('certificateIdPrefix', {
-                required: 'A prefix is required',
-                pattern: { value: /^[A-Za-z0-9]{2,10}$/, message: 'Use 2-10 letters/numbers, no spaces or symbols' },
-              })}
-            />
-            <Button type="submit" isLoading={updateMutation.isPending} className="mt-2 self-start">
-              Save changes
-            </Button>
-          </form>
+          )}
         </CardBody>
       </Card>
     </div>

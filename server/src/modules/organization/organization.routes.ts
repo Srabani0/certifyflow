@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { requireAuth } from '../../middleware/auth';
+import { requireAuth, requireRole } from '../../middleware/auth';
 import { update, uploadLogo } from './organization.controller';
 
 const upload = multer({
@@ -12,5 +12,5 @@ export const organizationRouter = Router();
 
 organizationRouter.use(requireAuth);
 
-organizationRouter.patch('/', update);
-organizationRouter.post('/logo', upload.single('logo'), uploadLogo);
+organizationRouter.patch('/', requireRole('OWNER', 'ADMIN'), update);
+organizationRouter.post('/logo', requireRole('OWNER', 'ADMIN'), upload.single('logo'), uploadLogo);

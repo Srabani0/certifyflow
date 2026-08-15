@@ -1,14 +1,20 @@
-import type { Organization } from '@prisma/client';
+import type { Organization, Role, User } from '@prisma/client';
 import { AppError } from '../../errors/AppError';
 import { prisma } from '../../lib/prisma';
 import { comparePassword, hashPassword } from '../../lib/password';
 import type { LoginInput, RegisterInput } from './auth.schema';
 
-export type SafeOrganization = Omit<Organization, 'passwordHash'>;
+export type SafeUser = Omit<User, 'passwordHash'>;
 
-export function toSafeOrganization(organization: Organization): SafeOrganization {
-  const { passwordHash: _passwordHash, ...safe } = organization;
+export function toSafeUser(user: User): SafeUser {
+  const { passwordHash: _passwordHash, ...safe } = user;
   return safe;
+}
+
+export interface AuthResult {
+  user: SafeUser;
+  organization: Organization;
+  role: Role;
 }
 
 function slugify(name: string): string {
@@ -36,10 +42,10 @@ async function generateUniqueSlug(name: string): Promise<string> {
   return candidate;
 }
 
-export async function registerOrganization(input: RegisterInput): Promise<SafeOrganization> {
-  const existing = await prisma.organization.findUnique({ where: { email: input.email }, select: { id: true } });
+export async function register(input: RegisterInput): Promise<AuthResult> {
+  const existing = await prisma.user.findUnique({ where: { email: input.email }, select: { id: true } });
   if (existing) {
-    throw AppError.conflict('An organization with this email already exists');
+    throw AppError.conflict('An account with this email already exists');
   }
 
   const [slug, passwordHash] = await Promise.all([
@@ -47,37 +53,69 @@ export async function registerOrganization(input: RegisterInput): Promise<SafeOr
     hashPassword(input.password),
   ]);
 
-  const organization = await prisma.organization.create({
-    data: {
-      name: input.organizationName,
-      slug,
-      email: input.email,
-      passwordHash,
-      website: input.website || null,
-    },
+  const { user, organization } = await prisma.$transaction(async (tx) => {
+    const createdUser = await tx.user.create({
+      data: {
+        fullName: input.fullName,
+        email: input.email,
+        passwordHash,
+      },
+    });
+    const createdOrganization = await tx.organization.create({
+      data: {
+        name: input.organizationName,
+        slug,
+        website: input.website || null,
+      },
+    });
+    await tx.organizationMember.create({
+      data: {
+        userId: createdUser.id,
+        organizationId: createdOrganization.id,
+        role: 'OWNER',
+      },
+    });
+    return { user: createdUser, organization: createdOrganization };
   });
 
-  return toSafeOrganization(organization);
+  return { user: toSafeUser(user), organization, role: 'OWNER' };
 }
 
-export async function authenticateOrganization(input: LoginInput): Promise<SafeOrganization> {
-  const organization = await prisma.organization.findUnique({ where: { email: input.email } });
-  if (!organization) {
+export async function login(input: LoginInput): Promise<AuthResult> {
+  const user = await prisma.user.findUnique({ where: { email: input.email } });
+  if (!user) {
     throw AppError.unauthorized('Invalid email or password');
   }
 
-  const passwordMatches = await comparePassword(input.password, organization.passwordHash);
+  const passwordMatches = await comparePassword(input.password, user.passwordHash);
   if (!passwordMatches) {
     throw AppError.unauthorized('Invalid email or password');
   }
 
-  return toSafeOrganization(organization);
+  const membership = await prisma.organizationMember.findFirst({
+    where: { userId: user.id },
+    include: { organization: true },
+    orderBy: { createdAt: 'asc' },
+  });
+  if (!membership) {
+    throw AppError.unauthorized('No organization membership found');
+  }
+
+  return { user: toSafeUser(user), organization: membership.organization, role: membership.role };
 }
 
-export async function getOrganizationById(organizationId: string): Promise<SafeOrganization> {
-  const organization = await prisma.organization.findUnique({ where: { id: organizationId } });
-  if (!organization) {
+export async function getAuthContext(userId: string, organizationId: string): Promise<AuthResult> {
+  const [user, membership] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId } }),
+    prisma.organizationMember.findUnique({
+      where: { userId_organizationId: { userId, organizationId } },
+      include: { organization: true },
+    }),
+  ]);
+
+  if (!user || !membership) {
     throw AppError.unauthorized('Session is no longer valid');
   }
-  return toSafeOrganization(organization);
+
+  return { user: toSafeUser(user), organization: membership.organization, role: membership.role };
 }

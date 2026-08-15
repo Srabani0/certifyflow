@@ -5,7 +5,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { useToast } from '../../components/ui/Toast';
 import { ApiError, apiRequest } from '../../lib/api';
-import type { Organization } from '../../lib/authContext';
+import type { AuthResponse } from '../../lib/authContext';
 import { AuthLayout } from './AuthLayout';
 
 interface LoginFormValues {
@@ -25,7 +25,7 @@ export function LoginPage(): JSX.Element {
 
   const mutation = useMutation({
     mutationFn: (values: LoginFormValues) =>
-      apiRequest<{ organization: Organization }>('/auth/login', { method: 'POST', body: values }),
+      apiRequest<AuthResponse>('/auth/login', { method: 'POST', body: values }),
     onSuccess: (data) => {
       queryClient.setQueryData(['auth', 'me'], data);
       navigate('/dashboard', { replace: true });

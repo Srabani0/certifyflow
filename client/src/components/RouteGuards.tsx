@@ -11,13 +11,13 @@ function FullScreenSpinner(): JSX.Element {
 }
 
 export function RequireAuth(): JSX.Element {
-  const { organization, isLoading } = useAuth();
+  const { user, isLoading } = useAuth();
 
   if (isLoading) {
     return <FullScreenSpinner />;
   }
 
-  if (!organization) {
+  if (!user) {
     return <Navigate to="/login" replace />;
   }
 
@@ -25,13 +25,13 @@ export function RequireAuth(): JSX.Element {
 }
 
 export function GuestOnly(): JSX.Element {
-  const { organization, isLoading } = useAuth();
+  const { user, isLoading } = useAuth();
 
   if (isLoading) {
     return <FullScreenSpinner />;
   }
 
-  if (organization) {
+  if (user) {
     return <Navigate to="/dashboard" replace />;
   }
 

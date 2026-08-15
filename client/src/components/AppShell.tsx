@@ -13,7 +13,7 @@ const NAV_ITEMS = [
 ];
 
 export function AppShell(): JSX.Element {
-  const { organization } = useAuth();
+  const { user, organization } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
@@ -53,7 +53,7 @@ export function AppShell(): JSX.Element {
         </nav>
         <div className="border-t border-gray-100 px-3 py-4">
           <p className="truncate px-3 text-sm font-medium text-gray-900">{organization?.name}</p>
-          <p className="truncate px-3 text-xs text-gray-500">{organization?.email}</p>
+          <p className="truncate px-3 text-xs text-gray-500">{user?.email}</p>
           <button
             type="button"
             onClick={() => logoutMutation.mutate()}

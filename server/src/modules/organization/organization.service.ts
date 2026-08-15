@@ -1,12 +1,12 @@
+import type { Organization } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
-import { toSafeOrganization, type SafeOrganization } from '../auth/auth.service';
 import type { UpdateOrganizationInput } from './organization.schema';
 
 export async function updateOrganizationProfile(
   organizationId: string,
   input: UpdateOrganizationInput,
-): Promise<SafeOrganization> {
-  const organization = await prisma.organization.update({
+): Promise<Organization> {
+  return prisma.organization.update({
     where: { id: organizationId },
     data: {
       ...(input.name !== undefined && { name: input.name }),
@@ -17,13 +17,11 @@ export async function updateOrganizationProfile(
       ...(input.certificateIdPrefix !== undefined && { certificateIdPrefix: input.certificateIdPrefix }),
     },
   });
-  return toSafeOrganization(organization);
 }
 
-export async function setOrganizationLogo(organizationId: string, logoUrl: string): Promise<SafeOrganization> {
-  const organization = await prisma.organization.update({
+export async function setOrganizationLogo(organizationId: string, logoUrl: string): Promise<Organization> {
+  return prisma.organization.update({
     where: { id: organizationId },
     data: { logoUrl },
   });
-  return toSafeOrganization(organization);
 }

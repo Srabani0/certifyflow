@@ -5,10 +5,11 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { useToast } from '../../components/ui/Toast';
 import { ApiError, apiRequest } from '../../lib/api';
-import type { Organization } from '../../lib/authContext';
+import type { AuthResponse } from '../../lib/authContext';
 import { AuthLayout } from './AuthLayout';
 
 interface RegisterFormValues {
+  fullName: string;
   organizationName: string;
   email: string;
   password: string;
@@ -27,7 +28,7 @@ export function RegisterPage(): JSX.Element {
 
   const mutation = useMutation({
     mutationFn: (values: RegisterFormValues) =>
-      apiRequest<{ organization: Organization }>('/auth/register', { method: 'POST', body: values }),
+      apiRequest<AuthResponse>('/auth/register', { method: 'POST', body: values }),
     onSuccess: (data) => {
       queryClient.setQueryData(['auth', 'me'], data);
       navigate('/dashboard', { replace: true });
@@ -51,6 +52,14 @@ export function RegisterPage(): JSX.Element {
       }
     >
       <form className="flex flex-col gap-4" onSubmit={handleSubmit((values) => mutation.mutate(values))}>
+        <Input
+          label="Full name"
+          error={errors.fullName?.message}
+          {...register('fullName', {
+            required: 'Full name is required',
+            minLength: { value: 2, message: 'Must be at least 2 characters' },
+          })}
+        />
         <Input
           label="Organization name"
           error={errors.organizationName?.message}

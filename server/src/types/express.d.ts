@@ -1,9 +1,10 @@
 import 'express';
+import type { AuthContext } from '../lib/authContext';
 
 declare global {
   namespace Express {
     interface Request {
-      organizationId?: string;
+      auth?: AuthContext;
     }
   }
 }
