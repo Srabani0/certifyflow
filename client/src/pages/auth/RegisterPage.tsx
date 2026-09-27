@@ -28,8 +28,11 @@ export function RegisterPage(): JSX.Element {
 
   const mutation = useMutation({
     mutationFn: (values: RegisterFormValues) =>
-      apiRequest<AuthResponse>('/auth/register', { method: 'POST', body: values }),
+      apiRequest<AuthResponse & { token?: string }>('/auth/register', { method: 'POST', body: values }),
     onSuccess: (data) => {
+      if (data.token) {
+        localStorage.setItem('cf_token', data.token);
+      }
       queryClient.setQueryData(['auth', 'me'], data);
       navigate('/dashboard', { replace: true });
     },

@@ -1,4 +1,7 @@
-export const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api';
+export const API_URL =
+  import.meta.env.VITE_API_URL ??
+  import.meta.env.VITE_PUBLIC_API_URL ??
+  'http://localhost:4000/api';
 
 export function buildQueryString(params: Record<string, string | undefined>): string {
   const searchParams = new URLSearchParams();
@@ -33,14 +36,28 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+function getHeaders(isFormData = false): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (!isFormData) {
+    headers['Content-Type'] = 'application/json';
+  }
+  const token = typeof window !== 'undefined' ? localStorage.getItem('cf_token') : null;
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, isFormData = false } = options;
 
   const baseUrl = API_URL.replace(/\/$/, '');
+  const headers = getHeaders(isFormData);
+
   const response = await fetch(`${baseUrl}${path}`, {
     method,
     credentials: 'include',
-    headers: body !== undefined && !isFormData ? { 'Content-Type': 'application/json' } : undefined,
+    headers,
     body: body === undefined ? undefined : isFormData ? (body as FormData) : JSON.stringify(body),
   });
 
@@ -66,10 +83,12 @@ export async function apiBlobRequest(path: string, options: RequestOptions = {})
   const { method = 'GET', body } = options;
 
   const baseUrl = API_URL.replace(/\/$/, '');
+  const headers = getHeaders(false);
+
   const response = await fetch(`${baseUrl}${path}`, {
     method,
     credentials: 'include',
-    headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+    headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 

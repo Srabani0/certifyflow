@@ -17,7 +17,7 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
   const result = await registerUser(input);
   const token = signToken({ userId: result.user.id, organizationId: result.organization.id, role: result.role });
   setAuthCookie(res, token);
-  res.status(201).json(result);
+  res.status(201).json({ ...result, token });
 });
 
 export const login = asyncHandler(async (req: Request, res: Response) => {
@@ -25,7 +25,7 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
   const result = await loginUser(input);
   const token = signToken({ userId: result.user.id, organizationId: result.organization.id, role: result.role });
   setAuthCookie(res, token);
-  res.status(200).json(result);
+  res.status(200).json({ ...result, token });
 });
 
 export const logout = (_req: Request, res: Response): void => {

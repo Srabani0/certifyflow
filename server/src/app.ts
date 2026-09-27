@@ -15,6 +15,7 @@ import { verifyRouter } from './modules/verify/verify.routes';
 
 export function createApp(): Express {
   const app = express();
+  app.set('trust proxy', 1);
 
   const allowedOrigins = env.CLIENT_URL.split(',').map((url) => url.trim().replace(/\/$/, ''));
 

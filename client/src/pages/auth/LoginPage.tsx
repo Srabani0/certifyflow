@@ -25,8 +25,11 @@ export function LoginPage(): JSX.Element {
 
   const mutation = useMutation({
     mutationFn: (values: LoginFormValues) =>
-      apiRequest<AuthResponse>('/auth/login', { method: 'POST', body: values }),
+      apiRequest<AuthResponse & { token?: string }>('/auth/login', { method: 'POST', body: values }),
     onSuccess: (data) => {
+      if (data.token) {
+        localStorage.setItem('cf_token', data.token);
+      }
       queryClient.setQueryData(['auth', 'me'], data);
       navigate('/dashboard', { replace: true });
     },

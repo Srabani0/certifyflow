@@ -22,6 +22,7 @@ export function AppShell(): JSX.Element {
   const logoutMutation = useMutation({
     mutationFn: () => apiRequest('/auth/logout', { method: 'POST' }),
     onSuccess: () => {
+      localStorage.removeItem('cf_token');
       queryClient.removeQueries({ queryKey: ['auth', 'me'] });
       navigate('/login', { replace: true });
     },
