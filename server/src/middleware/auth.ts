@@ -5,7 +5,10 @@ import { AppError } from '../errors/AppError';
 import { verifyToken } from '../lib/jwt';
 
 export const requireAuth: RequestHandler = (req, _res, next) => {
-  const token = req.cookies?.[env.COOKIE_NAME];
+  const authHeader = req.headers.authorization;
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
+  const token = req.cookies?.[env.COOKIE_NAME] || bearerToken;
+
   if (!token) {
     next(AppError.unauthorized('Authentication required'));
     return;

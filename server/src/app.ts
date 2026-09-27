@@ -16,7 +16,25 @@ import { verifyRouter } from './modules/verify/verify.routes';
 export function createApp(): Express {
   const app = express();
 
-  app.use(cors({ origin: env.CLIENT_URL, credentials: true }));
+  const allowedOrigins = env.CLIENT_URL.split(',').map((url) => url.trim().replace(/\/$/, ''));
+
+  app.use(
+    cors({
+      origin: (origin, callback) => {
+        if (!origin) return callback(null, true);
+        const normalizedOrigin = origin.replace(/\/$/, '');
+        if (
+          allowedOrigins.includes('*') ||
+          allowedOrigins.includes(normalizedOrigin) ||
+          normalizedOrigin.endsWith('.vercel.app')
+        ) {
+          return callback(null, true);
+        }
+        return callback(null, origin);
+      },
+      credentials: true,
+    })
+  );
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
   app.use(cookieParser());

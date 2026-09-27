@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: certifyflow_db
+    environment:
+      POSTGRES_USER: certifyflow
+      POSTGRES_PASSWORD: certifyflow_password
+      POSTGRES_DB: certifyflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U certifyflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: certifyflow_server
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://certifyflow:certifyflow_password@postgres:5432/certifyflow?schema=public
+      JWT_SECRET: "cf_sec_9f7a8b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e"
+      JWT_EXPIRES_IN: "7d"
+      COOKIE_NAME: "cf_token"
+      CLIENT_URL: "http://localhost:5173"
+      PUBLIC_SERVER_URL: "http://localhost:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:

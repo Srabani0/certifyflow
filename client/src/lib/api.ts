@@ -36,7 +36,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, isFormData = false } = options;
 
-  const response = await fetch(`${API_URL}${path}`, {
+  const baseUrl = API_URL.replace(/\/$/, '');
+  const response = await fetch(`${baseUrl}${path}`, {
     method,
     credentials: 'include',
     headers: body !== undefined && !isFormData ? { 'Content-Type': 'application/json' } : undefined,
@@ -64,7 +65,8 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 export async function apiBlobRequest(path: string, options: RequestOptions = {}): Promise<Blob> {
   const { method = 'GET', body } = options;
 
-  const response = await fetch(`${API_URL}${path}`, {
+  const baseUrl = API_URL.replace(/\/$/, '');
+  const response = await fetch(`${baseUrl}${path}`, {
     method,
     credentials: 'include',
     headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
