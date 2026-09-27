@@ -4,7 +4,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { Textarea } from '../../components/ui/Textarea';
-import type { CertificateTemplateSummary } from '../../lib/types';
+import type { CertificateTemplateSummary, Signature } from '../../lib/types';
 
 export interface SignatoryFormValue {
   name: string;
@@ -23,6 +23,7 @@ export interface CertificateTypeFormValues {
 interface CertificateTypeFormProps {
   templates: CertificateTemplateSummary[];
   customFields?: string[];
+  signatures?: Signature[];
   defaultValues?: Partial<CertificateTypeFormValues>;
   onSubmit: (values: CertificateTypeFormValues) => void;
   isSubmitting?: boolean;
@@ -43,6 +44,7 @@ const BUILT_IN_FIELDS = [
 export function CertificateTypeForm({
   templates,
   customFields = [],
+  signatures = [],
   defaultValues,
   onSubmit,
   isSubmitting,
@@ -125,17 +127,43 @@ export function CertificateTypeForm({
       </div>
 
       <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm font-medium text-gray-700">Signatories</p>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => append({ name: '', designation: '', signatureImageUrl: '' })}
-            disabled={fields.length >= 5}
-          >
-            + Add signatory
-          </Button>
+          <div className="flex items-center gap-2">
+            {signatures.length > 0 && (
+              <select
+                className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs"
+                disabled={fields.length >= 5}
+                value=""
+                onChange={(event) => {
+                  const signature = signatures.find((s) => s.id === event.target.value);
+                  if (signature) {
+                    append({
+                      name: signature.name,
+                      designation: signature.designation,
+                      signatureImageUrl: signature.imageUrl ?? '',
+                    });
+                  }
+                }}
+              >
+                <option value="">Add from library…</option>
+                {signatures.map((signature) => (
+                  <option key={signature.id} value={signature.id}>
+                    {signature.name} — {signature.designation}
+                  </option>
+                ))}
+              </select>
+            )}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => append({ name: '', designation: '', signatureImageUrl: '' })}
+              disabled={fields.length >= 5}
+            >
+              + Add signatory
+            </Button>
+          </div>
         </div>
         {fields.map((field, index) => (
           <div key={field.id} className="flex flex-col gap-2 rounded-lg border border-gray-200 p-3">

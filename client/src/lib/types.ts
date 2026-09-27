@@ -11,6 +11,7 @@ export type EventType =
 
 export type EventStatus = 'DRAFT' | 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
 export type CertificateStatus = 'GENERATED' | 'REVOKED';
+export type EmailStatus = 'NOT_SENT' | 'SENT' | 'FAILED' | 'OPENED' | 'CLICKED' | 'BOUNCED';
 
 export interface EventSummary {
   id: string;
@@ -44,6 +45,15 @@ export interface Signatory {
   name: string;
   designation: string;
   signatureImageUrl?: string | null;
+}
+
+export interface Signature {
+  id: string;
+  organizationId: string;
+  name: string;
+  designation: string;
+  imageUrl: string | null;
+  createdAt: string;
 }
 
 export interface CertificateTypeSummary {
@@ -82,9 +92,33 @@ export interface CertificateSummary {
   issuedAt: string;
   revokedAt: string | null;
   verificationCount: number;
+  emailStatus: EmailStatus;
+  emailSentAt: string | null;
+  emailMessageId: string | null;
+  emailError: string | null;
   createdAt: string;
   participant?: { id: string; fullName: string; email: string | null };
   certificateType?: { id: string; name: string; title: string };
+}
+
+export type BatchStatus = 'PENDING' | 'COMPLETED' | 'FAILED';
+
+export interface CertificateBatchSummary {
+  id: string;
+  organizationId: string;
+  eventId: string;
+  status: BatchStatus;
+  requestedCount: number;
+  generatedCount: number;
+  skippedCount: number;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface BatchPreviewResult {
+  totalParticipants: number;
+  willGenerate: number;
+  skipped: { participantId: string; participantName: string; reason: string }[];
 }
 
 export interface CsvImportResult {
@@ -123,6 +157,16 @@ export interface VerifyResult {
   valid: boolean;
   reason?: string;
   certificate?: VerifiedCertificateInfo;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  action: string;
+  targetType: string | null;
+  targetId: string | null;
+  metadata: unknown;
+  createdAt: string;
+  actor: { id: string; fullName: string; email: string } | null;
 }
 
 export interface DashboardSummary {

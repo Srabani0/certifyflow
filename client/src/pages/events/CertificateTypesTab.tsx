@@ -10,7 +10,7 @@ import { useToast } from '../../components/ui/Toast';
 import { ApiError, apiBlobRequest, apiRequest } from '../../lib/api';
 import { openBlobInNewTab } from '../../lib/download';
 import { sanitizeFieldKey } from '../../lib/participantFields';
-import type { CertificateTemplateSummary, CertificateTypeSummary, ParticipantSummary } from '../../lib/types';
+import type { CertificateTemplateSummary, CertificateTypeSummary, ParticipantSummary, Signature } from '../../lib/types';
 import { CertificateTypeForm, type CertificateTypeFormValues } from './CertificateTypeForm';
 
 interface CertificateTypesTabProps {
@@ -36,6 +36,11 @@ export function CertificateTypesTab({ eventId }: CertificateTypesTabProps): JSX.
   const participantsQuery = useQuery({
     queryKey: ['events', eventId, 'participants'],
     queryFn: () => apiRequest<{ participants: ParticipantSummary[] }>(`/events/${eventId}/participants`),
+  });
+
+  const signaturesQuery = useQuery({
+    queryKey: ['signatures'],
+    queryFn: () => apiRequest<{ signatures: Signature[] }>('/signatures'),
   });
 
   const invalidate = (): void => {
@@ -99,6 +104,7 @@ export function CertificateTypesTab({ eventId }: CertificateTypesTabProps): JSX.
 
   const certificateTypes = certificateTypesQuery.data?.certificateTypes ?? [];
   const templates = templatesQuery.data?.templates ?? [];
+  const signatures = signaturesQuery.data?.signatures ?? [];
 
   const customFields = Array.from(
     new Set(
@@ -181,6 +187,7 @@ export function CertificateTypesTab({ eventId }: CertificateTypesTabProps): JSX.
         <CertificateTypeForm
           templates={templates}
           customFields={customFields}
+          signatures={signatures}
           onSubmit={(values) => createMutation.mutate(values)}
           isSubmitting={createMutation.isPending}
           submitLabel="Create certificate type"

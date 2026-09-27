@@ -15,6 +15,9 @@ const envSchema = z.object({
   STORAGE_DIR: z.string().default('storage'),
   PUBLIC_VERIFY_BASE_URL: z.string().url().optional(),
   PUBLIC_SERVER_URL: z.string().url().optional(),
+  BREVO_API_KEY: z.string().optional(),
+  BREVO_SENDER_EMAIL: z.string().email().optional(),
+  BREVO_SENDER_NAME: z.string().optional(),
 });
 
 function loadEnv() {

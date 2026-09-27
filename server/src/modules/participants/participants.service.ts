@@ -1,6 +1,7 @@
 import type { Participant, Prisma } from '@prisma/client';
 import { AppError } from '../../errors/AppError';
 import { csvRowsToRecords, parseCsv, stringifyCsv } from '../../lib/csv';
+import { isExcelFile, parseExcelToRows } from '../../lib/excel';
 import { prisma } from '../../lib/prisma';
 import { getOwnedCertificateTypeOrThrow } from '../certificateTypes/certificateTypes.service';
 import { getOwnedEventOrThrow } from '../events/events.service';
@@ -169,13 +170,15 @@ export interface CsvPreviewResult {
 export async function previewCsvImport(
   organizationId: string,
   eventId: string,
-  csvBuffer: Buffer,
+  fileBuffer: Buffer,
+  filename: string,
 ): Promise<CsvPreviewResult> {
   await getOwnedEventOrThrow(organizationId, eventId);
 
-  const { headers, records } = csvRowsToRecords(parseCsv(csvBuffer.toString('utf8')));
+  const rows = isExcelFile(filename) ? parseExcelToRows(fileBuffer) : parseCsv(fileBuffer.toString('utf8'));
+  const { headers, records } = csvRowsToRecords(rows);
   if (headers.length === 0 || records.length === 0) {
-    throw AppError.badRequest('The CSV file is empty');
+    throw AppError.badRequest('The file is empty');
   }
 
   const certificateTypes = await prisma.certificateType.findMany({

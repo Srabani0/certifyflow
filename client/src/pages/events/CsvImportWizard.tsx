@@ -93,18 +93,18 @@ export function CsvImportWizard({ eventId, open, onClose, onImported }: CsvImpor
   const sampleRows = preview ? preview.rows.slice(0, 5) : [];
 
   return (
-    <Modal open={open} onClose={handleClose} title="Import participants from CSV" size="lg">
+    <Modal open={open} onClose={handleClose} title="Import participants from CSV/Excel" size="lg">
       <div className="flex flex-col gap-4">
         {!preview && (
           <>
             <p className="text-sm text-gray-600">
-              Upload a CSV file with a header row. On the next step you can confirm which column holds the name,
-              email, and optionally a category to auto-assign certificate types.
+              Upload a CSV or Excel file with a header row. On the next step you can confirm which column holds the
+              name, email, and optionally a category to auto-assign certificate types.
             </p>
             <input
               ref={fileInputRef}
               type="file"
-              accept=".csv,text/csv"
+              accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
               onChange={(event) => setCsvFile(event.target.files?.[0] ?? null)}
               className="text-sm"
             />

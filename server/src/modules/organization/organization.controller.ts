@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { env } from '../../config/env';
 import { AppError } from '../../errors/AppError';
 import { asyncHandler } from '../../lib/asyncHandler';
+import { recordAuditLog } from '../../lib/auditLog';
 import { requireAuthContext } from '../../lib/authContext';
 import { saveFile } from '../../lib/storage';
 import { getAuthContext } from '../auth/auth.service';
@@ -12,6 +13,7 @@ export const update = asyncHandler(async (req: Request, res: Response) => {
   const { userId, organizationId } = requireAuthContext(req);
   const input = updateOrganizationSchema.parse(req.body);
   await updateOrganizationProfile(organizationId, input);
+  await recordAuditLog(organizationId, userId, 'organization.updated');
   const result = await getAuthContext(userId, organizationId);
   res.status(200).json(result);
 });
@@ -38,6 +40,7 @@ export const uploadLogo = asyncHandler(async (req: Request, res: Response) => {
 
   const logoUrl = `${env.PUBLIC_SERVER_URL}/uploads/logos/${relativePath}`;
   await setOrganizationLogo(organizationId, logoUrl);
+  await recordAuditLog(organizationId, userId, 'organization.logo_updated');
   const result = await getAuthContext(userId, organizationId);
   res.status(200).json(result);
 });

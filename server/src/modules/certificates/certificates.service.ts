@@ -39,18 +39,40 @@ interface GenerateForParticipantResult {
   skippedReason?: string;
 }
 
+interface ParticipantClassification {
+  participantId: string;
+  eligible: boolean;
+  skippedReason?: string;
+}
+
+async function classifyParticipant(participant: ParticipantForGeneration): Promise<ParticipantClassification> {
+  if (!participant.certificateTypeId) {
+    return { participantId: participant.id, eligible: false, skippedReason: 'No certificate type assigned' };
+  }
+
+  const existing = await prisma.certificate.findUnique({
+    where: { participantId: participant.id },
+    select: { id: true },
+  });
+  if (existing) {
+    return { participantId: participant.id, eligible: false, skippedReason: 'Certificate already generated' };
+  }
+
+  return { participantId: participant.id, eligible: true };
+}
+
 async function generateForParticipant(
   organization: Pick<Organization, 'id' | 'name' | 'logoUrl' | 'certificateIdPrefix'>,
   event: { id: string; name: string; location: string | null; startDate: Date | null; endDate: Date | null },
   participant: ParticipantForGeneration,
+  batchId: string,
 ): Promise<GenerateForParticipantResult> {
-  if (!participant.certificateTypeId) {
-    return { participantId: participant.id, skippedReason: 'No certificate type assigned' };
-  }
-
-  const existing = await prisma.certificate.findUnique({ where: { participantId: participant.id } });
-  if (existing) {
-    return { participantId: participant.id, skippedReason: 'Certificate already generated' };
+  const classification = await classifyParticipant(participant);
+  if (!classification.eligible || !participant.certificateTypeId) {
+    return {
+      participantId: participant.id,
+      skippedReason: classification.skippedReason ?? 'No certificate type assigned',
+    };
   }
 
   const certificateType = await prisma.certificateType.findUnique({
@@ -89,12 +111,53 @@ async function generateForParticipant(
       eventId: event.id,
       certificateTypeId: certificateType.id,
       participantId: participant.id,
+      batchId,
       pdfPath: relativePdfPath,
       issuedAt,
     },
   });
 
   return { participantId: participant.id, certificate };
+}
+
+export interface BatchPreviewResult {
+  totalParticipants: number;
+  willGenerate: number;
+  skipped: { participantId: string; participantName: string; reason: string }[];
+}
+
+export async function previewBatchGeneration(
+  organizationId: string,
+  eventId: string,
+  participantIds: string[] | undefined,
+): Promise<BatchPreviewResult> {
+  await getOwnedEventOrThrow(organizationId, eventId);
+
+  const participants = await prisma.participant.findMany({
+    where: {
+      eventId,
+      ...(participantIds ? { id: { in: participantIds } } : {}),
+    },
+  });
+
+  let willGenerate = 0;
+  const skipped: { participantId: string; participantName: string; reason: string }[] = [];
+
+  for (const participant of participants) {
+    // eslint-disable-next-line no-await-in-loop
+    const classification = await classifyParticipant(participant);
+    if (classification.eligible) {
+      willGenerate += 1;
+    } else {
+      skipped.push({
+        participantId: participant.id,
+        participantName: participant.fullName,
+        reason: classification.skippedReason ?? 'Not eligible',
+      });
+    }
+  }
+
+  return { totalParticipants: participants.length, willGenerate, skipped };
 }
 
 export interface BatchGenerateResult {
@@ -118,19 +181,51 @@ export async function batchGenerateCertificates(
     },
   });
 
+  const batch = await prisma.certificateBatch.create({
+    data: {
+      organizationId,
+      eventId,
+      requestedCount: participants.length,
+    },
+  });
+
   const results: GenerateForParticipantResult[] = [];
-  for (const participant of participants) {
-    // Sequential on purpose: reuses one warm browser instance instead of spawning many pages at once.
-    // eslint-disable-next-line no-await-in-loop
-    const result = await generateForParticipant(organization, event, participant);
-    results.push(result);
+  try {
+    for (const participant of participants) {
+      // Sequential on purpose: reuses one warm browser instance instead of spawning many pages at once.
+      // eslint-disable-next-line no-await-in-loop
+      const result = await generateForParticipant(organization, event, participant, batch.id);
+      results.push(result);
+    }
+  } catch (error) {
+    await prisma.certificateBatch.update({
+      where: { id: batch.id },
+      data: { status: 'FAILED', completedAt: new Date() },
+    });
+    throw error;
   }
+
+  const generatedCount = results.filter((r) => r.certificate).length;
+  const skippedCount = results.filter((r) => r.skippedReason).length;
+
+  await prisma.certificateBatch.update({
+    where: { id: batch.id },
+    data: { status: 'COMPLETED', generatedCount, skippedCount, completedAt: new Date() },
+  });
 
   return {
     requested: participants.length,
     generated: results.flatMap((r) => (r.certificate ? [r.certificate] : [])),
     skipped: results.flatMap((r) => (r.skippedReason ? [{ participantId: r.participantId, reason: r.skippedReason }] : [])),
   };
+}
+
+export async function listBatches(organizationId: string, eventId: string) {
+  await getOwnedEventOrThrow(organizationId, eventId);
+  return prisma.certificateBatch.findMany({
+    where: { eventId },
+    orderBy: { createdAt: 'desc' },
+  });
 }
 
 export async function generateTestCertificate(

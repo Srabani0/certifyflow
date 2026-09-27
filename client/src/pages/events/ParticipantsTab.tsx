@@ -156,7 +156,7 @@ export function ParticipantsTab({ eventId }: ParticipantsTabProps): JSX.Element 
             Export CSV
           </Button>
           <Button variant="outline" onClick={() => setIsImportOpen(true)}>
-            Import CSV
+            Import CSV/Excel
           </Button>
           <Button onClick={() => setIsAddOpen(true)}>Add participant</Button>
         </div>

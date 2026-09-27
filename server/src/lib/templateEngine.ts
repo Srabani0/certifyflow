@@ -7,7 +7,7 @@ const EACH_BLOCK = /\{\{#each (\w+)\}\}([\s\S]*?)\{\{\/each\}\}/g;
 const IF_BLOCK = /\{\{#if (\w+)\}\}([\s\S]*?)\{\{\/if\}\}/g;
 const VARIABLE = /\{\{(\w+)\}\}/g;
 
-function escapeHtml(value: string): string {
+export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')

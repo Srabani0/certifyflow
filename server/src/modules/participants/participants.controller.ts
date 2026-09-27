@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { asyncHandler } from '../../lib/asyncHandler';
 import { AppError } from '../../errors/AppError';
+import { recordAuditLog } from '../../lib/auditLog';
 import { requireAuthContext } from '../../lib/authContext';
 import {
   addParticipantSchema,
@@ -69,16 +70,23 @@ export const bulkAssign = asyncHandler(async (req: Request, res: Response) => {
 export const previewImport = asyncHandler(async (req: Request, res: Response) => {
   const { organizationId } = requireAuthContext(req);
   if (!req.file) {
-    throw AppError.badRequest('No CSV file was uploaded');
+    throw AppError.badRequest('No file was uploaded');
   }
-  const result = await previewCsvImport(organizationId, req.params.eventId, req.file.buffer);
+  const result = await previewCsvImport(organizationId, req.params.eventId, req.file.buffer, req.file.originalname);
   res.status(200).json(result);
 });
 
 export const confirmImport = asyncHandler(async (req: Request, res: Response) => {
-  const { organizationId } = requireAuthContext(req);
+  const { userId, organizationId } = requireAuthContext(req);
   const input = confirmImportSchema.parse(req.body);
   const result = await confirmCsvImport(organizationId, req.params.eventId, input.rows, input.mapping);
+  await recordAuditLog(
+    organizationId,
+    userId,
+    'participants.imported',
+    { type: 'event', id: req.params.eventId },
+    { imported: result.imported, skipped: result.skipped },
+  );
   res.status(200).json(result);
 });
 

@@ -62,6 +62,9 @@ export function LoginPage(): JSX.Element {
           error={errors.password?.message}
           {...register('password', { required: 'Password is required' })}
         />
+        <Link to="/forgot-password" className="-mt-2 self-end text-xs font-medium text-brand-600 hover:text-brand-700">
+          Forgot password?
+        </Link>
         <Button type="submit" isLoading={mutation.isPending} className="mt-2">
           Sign in
         </Button>

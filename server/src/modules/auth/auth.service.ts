@@ -1,8 +1,14 @@
+import crypto from 'node:crypto';
 import type { Organization, Role, User } from '@prisma/client';
+import { env } from '../../config/env';
 import { AppError } from '../../errors/AppError';
+import { sendTransactionalEmail } from '../../lib/brevo';
 import { prisma } from '../../lib/prisma';
 import { comparePassword, hashPassword } from '../../lib/password';
+import { escapeHtml } from '../../lib/templateEngine';
 import type { LoginInput, RegisterInput } from './auth.schema';
+
+const RESET_TOKEN_EXPIRY_MS = 60 * 60 * 1000;
 
 export type SafeUser = Omit<User, 'passwordHash'>;
 
@@ -118,4 +124,60 @@ export async function getAuthContext(userId: string, organizationId: string): Pr
   }
 
   return { user: toSafeUser(user), organization: membership.organization, role: membership.role };
+}
+
+function hashResetToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+export async function requestPasswordReset(email: string): Promise<void> {
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) {
+    return;
+  }
+
+  const token = crypto.randomBytes(32).toString('hex');
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      passwordResetTokenHash: hashResetToken(token),
+      passwordResetExpiresAt: new Date(Date.now() + RESET_TOKEN_EXPIRY_MS),
+    },
+  });
+
+  const resetUrl = `${env.CLIENT_URL}/reset-password?token=${token}`;
+  try {
+    await sendTransactionalEmail({
+      to: { email: user.email, name: user.fullName },
+      subject: 'Reset your CertifyFlow password',
+      htmlContent: `
+        <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1f2937;">
+          <p>Hi ${escapeHtml(user.fullName)},</p>
+          <p>Click the link below to reset your password. This link expires in 1 hour.</p>
+          <p><a href="${resetUrl}">${escapeHtml(resetUrl)}</a></p>
+          <p>If you didn't request this, you can safely ignore this email.</p>
+        </div>
+      `.trim(),
+    });
+  } catch (error) {
+    // Don't let a misconfigured/failing email provider leak whether this address has an
+    // account, or block the (already-generic) response — just log it server-side.
+    // eslint-disable-next-line no-console
+    console.error('Failed to send password reset email:', error);
+  }
+}
+
+export async function resetPassword(token: string, newPassword: string): Promise<void> {
+  const user = await prisma.user.findFirst({
+    where: { passwordResetTokenHash: hashResetToken(token), passwordResetExpiresAt: { gt: new Date() } },
+  });
+  if (!user) {
+    throw AppError.badRequest('This reset link is invalid or has expired');
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { passwordHash, passwordResetTokenHash: null, passwordResetExpiresAt: null },
+  });
 }

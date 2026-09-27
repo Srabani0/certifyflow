@@ -7,6 +7,7 @@ import { Input } from '../components/ui/Input';
 import { useToast } from '../components/ui/Toast';
 import { ApiError, apiRequest } from '../lib/api';
 import { useAuth, type AuthResponse } from '../lib/authContext';
+import { SignaturesCard } from './SignaturesCard';
 
 interface SettingsFormValues {
   name: string;
@@ -178,6 +179,8 @@ export function SettingsPage(): JSX.Element {
           )}
         </CardBody>
       </Card>
+
+      <SignaturesCard canEdit={canEdit} />
     </div>
   );
 }

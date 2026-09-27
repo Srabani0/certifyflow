@@ -12,9 +12,34 @@ import { useToast } from '../../components/ui/Toast';
 import { ApiError, apiBlobRequest, apiRequest, buildQueryString } from '../../lib/api';
 import { openBlobInNewTab, triggerBlobDownload } from '../../lib/download';
 import { useDebouncedValue } from '../../lib/useDebouncedValue';
-import type { CertificateStatus, CertificateSummary, ParticipantSummary } from '../../lib/types';
+import type {
+  BatchPreviewResult,
+  CertificateBatchSummary,
+  CertificateStatus,
+  CertificateSummary,
+  EmailStatus,
+  ParticipantSummary,
+} from '../../lib/types';
 
 type PreviewPosition = 'first' | 'random' | 'last';
+
+const EMAIL_STATUS_LABELS: Record<EmailStatus, string> = {
+  NOT_SENT: 'Not sent',
+  SENT: 'Sent',
+  FAILED: 'Failed',
+  OPENED: 'Opened',
+  CLICKED: 'Clicked',
+  BOUNCED: 'Bounced',
+};
+
+const EMAIL_STATUS_COLORS: Record<EmailStatus, 'gray' | 'green' | 'blue' | 'red' | 'yellow' | 'purple'> = {
+  NOT_SENT: 'gray',
+  SENT: 'blue',
+  FAILED: 'red',
+  OPENED: 'purple',
+  CLICKED: 'green',
+  BOUNCED: 'red',
+};
 
 interface CertificatesTabProps {
   eventId: string;
@@ -34,6 +59,7 @@ export function CertificatesTab({ eventId }: CertificatesTabProps): JSX.Element 
   const [searchInput, setSearchInput] = useState('');
   const [status, setStatus] = useState<CertificateStatus | ''>('');
   const [sort, setSort] = useState('newest');
+  const [isBatchHistoryOpen, setIsBatchHistoryOpen] = useState(false);
   const search = useDebouncedValue(searchInput, 300);
 
   const certificatesQuery = useQuery({
@@ -47,6 +73,21 @@ export function CertificatesTab({ eventId }: CertificatesTabProps): JSX.Element 
   const participantsQuery = useQuery({
     queryKey: ['events', eventId, 'participants'],
     queryFn: () => apiRequest<{ participants: ParticipantSummary[] }>(`/events/${eventId}/participants`),
+  });
+
+  const previewQuery = useQuery({
+    queryKey: ['events', eventId, 'certificates', 'generate-preview'],
+    queryFn: () =>
+      apiRequest<BatchPreviewResult>(`/events/${eventId}/certificates/generate/preview`, {
+        method: 'POST',
+        body: {},
+      }),
+  });
+
+  const batchesQuery = useQuery({
+    queryKey: ['events', eventId, 'certificates', 'batches'],
+    queryFn: () => apiRequest<{ batches: CertificateBatchSummary[] }>(`/events/${eventId}/certificates/batches`),
+    enabled: isBatchHistoryOpen,
   });
 
   const generateMutation = useMutation({
@@ -110,6 +151,51 @@ export function CertificatesTab({ eventId }: CertificatesTabProps): JSX.Element 
     },
   });
 
+  const sendEmailMutation = useMutation({
+    mutationFn: (certificateRecordId: string) =>
+      apiRequest<{ certificate: CertificateSummary }>(
+        `/events/${eventId}/certificates/${certificateRecordId}/email`,
+        { method: 'POST' },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['events', eventId, 'certificates'] });
+      showToast('Certificate emailed', 'success');
+    },
+    onError: (error: unknown) => {
+      showToast(error instanceof ApiError ? error.message : 'Could not send email', 'error');
+    },
+  });
+
+  const bulkEmailMutation = useMutation({
+    mutationFn: () =>
+      apiRequest<{ requested: number; sent: number; failed: { certificateId: string; reason: string }[] }>(
+        `/events/${eventId}/certificates/email`,
+        { method: 'POST', body: {} },
+      ),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['events', eventId, 'certificates'] });
+      showToast(`Emailed ${result.sent} of ${result.requested} certificates`, 'success');
+    },
+    onError: (error: unknown) => {
+      showToast(error instanceof ApiError ? error.message : 'Could not send emails', 'error');
+    },
+  });
+
+  const refreshTrackingMutation = useMutation({
+    mutationFn: (certificateRecordId: string) =>
+      apiRequest<{ certificate: CertificateSummary }>(
+        `/events/${eventId}/certificates/${certificateRecordId}/email/refresh`,
+        { method: 'POST' },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['events', eventId, 'certificates'] });
+      showToast('Tracking refreshed', 'success');
+    },
+    onError: (error: unknown) => {
+      showToast(error instanceof ApiError ? error.message : 'Could not refresh tracking', 'error');
+    },
+  });
+
   const previewSampleMutation = useMutation({
     mutationFn: (participant: ParticipantSummary) =>
       apiBlobRequest(`/events/${eventId}/certificates/test`, {
@@ -143,6 +229,16 @@ export function CertificatesTab({ eventId }: CertificatesTabProps): JSX.Element 
     previewSampleMutation.mutate(participant);
   }
 
+  async function copyVerifyLink(certificateId: string): Promise<void> {
+    const url = `${window.location.origin}/verify/${certificateId}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast('Verification link copied', 'success');
+    } catch {
+      showToast('Could not copy link', 'error');
+    }
+  }
+
   if (certificatesQuery.isLoading) {
     return (
       <div className="flex justify-center py-16">
@@ -174,11 +270,63 @@ export function CertificatesTab({ eventId }: CertificatesTabProps): JSX.Element 
           >
             Download all (ZIP)
           </Button>
+          <Button
+            variant="outline"
+            disabled={certificates.length === 0}
+            isLoading={bulkEmailMutation.isPending}
+            onClick={() => bulkEmailMutation.mutate()}
+          >
+            Email all
+          </Button>
+          <Button variant="outline" onClick={() => setIsBatchHistoryOpen((open) => !open)}>
+            Batch history
+          </Button>
           <Button isLoading={generateMutation.isPending} onClick={() => generateMutation.mutate()}>
             Generate certificates
           </Button>
         </div>
       </div>
+
+      {isBatchHistoryOpen && (
+        <Card>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-gray-100 text-xs uppercase text-gray-500">
+                <tr>
+                  <th className="px-5 py-3">Started</th>
+                  <th className="px-3 py-3">Status</th>
+                  <th className="px-3 py-3">Requested</th>
+                  <th className="px-3 py-3">Generated</th>
+                  <th className="px-3 py-3">Skipped</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {(batchesQuery.data?.batches ?? []).length === 0 ? (
+                  <tr>
+                    <td className="px-5 py-4 text-gray-500" colSpan={5}>
+                      {batchesQuery.isLoading ? 'Loading…' : 'No batches generated yet.'}
+                    </td>
+                  </tr>
+                ) : (
+                  batchesQuery.data?.batches.map((batch) => (
+                    <tr key={batch.id}>
+                      <td className="px-5 py-3 text-gray-600">{new Date(batch.createdAt).toLocaleString()}</td>
+                      <td className="px-3 py-3">
+                        <Badge color={batch.status === 'FAILED' ? 'red' : batch.status === 'PENDING' ? 'gray' : 'green'}>
+                          {batch.status}
+                        </Badge>
+                      </td>
+                      <td className="px-3 py-3 text-gray-600">{batch.requestedCount}</td>
+                      <td className="px-3 py-3 text-gray-600">{batch.generatedCount}</td>
+                      <td className="px-3 py-3 text-gray-600">{batch.skippedCount}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       <div className="flex flex-wrap items-end gap-3">
         <Input
@@ -214,6 +362,21 @@ export function CertificatesTab({ eventId }: CertificatesTabProps): JSX.Element 
               {position.charAt(0).toUpperCase() + position.slice(1)}
             </Button>
           ))}
+        </div>
+      )}
+
+      {previewQuery.data && !generateMutation.isPending && !lastResult && (
+        <div className="rounded-lg bg-gray-50 p-4 text-sm">
+          <p className="font-medium text-gray-900">
+            {previewQuery.data.willGenerate} of {previewQuery.data.totalParticipants} participants will be
+            generated
+          </p>
+          {previewQuery.data.skipped.length > 0 && (
+            <p className="mt-1 text-gray-600">
+              {previewQuery.data.skipped.length} will be skipped — most commonly because a participant has no
+              certificate type assigned, or already has a certificate.
+            </p>
+          )}
         </div>
       )}
 
@@ -257,6 +420,7 @@ export function CertificatesTab({ eventId }: CertificatesTabProps): JSX.Element 
                   <th className="px-3 py-3">Type</th>
                   <th className="px-3 py-3">Certificate ID</th>
                   <th className="px-3 py-3">Status</th>
+                  <th className="px-3 py-3">Email</th>
                   <th className="px-3 py-3">Issued</th>
                   <th className="px-3 py-3" />
                 </tr>
@@ -278,6 +442,11 @@ export function CertificatesTab({ eventId }: CertificatesTabProps): JSX.Element 
                     <td className="px-3 py-3">
                       <Badge color={certificate.status === 'REVOKED' ? 'red' : 'green'}>{certificate.status}</Badge>
                     </td>
+                    <td className="px-3 py-3">
+                      <Badge color={EMAIL_STATUS_COLORS[certificate.emailStatus]}>
+                        {EMAIL_STATUS_LABELS[certificate.emailStatus]}
+                      </Badge>
+                    </td>
                     <td className="px-3 py-3 text-gray-600">{new Date(certificate.issuedAt).toLocaleDateString()}</td>
                     <td className="px-3 py-3 text-right">
                       <div className="flex justify-end gap-3">
@@ -287,6 +456,21 @@ export function CertificatesTab({ eventId }: CertificatesTabProps): JSX.Element 
                           onClick={() => downloadMutation.mutate(certificate)}
                         >
                           Download
+                        </button>
+                        <button
+                          type="button"
+                          className="text-xs font-medium text-gray-600 hover:text-gray-800"
+                          disabled={sendEmailMutation.isPending && sendEmailMutation.variables === certificate.id}
+                          onClick={() => sendEmailMutation.mutate(certificate.id)}
+                        >
+                          {certificate.emailStatus === 'NOT_SENT' ? 'Email' : 'Resend'}
+                        </button>
+                        <button
+                          type="button"
+                          className="text-xs font-medium text-gray-600 hover:text-gray-800"
+                          onClick={() => copyVerifyLink(certificate.certificateId)}
+                        >
+                          Copy link
                         </button>
                         {certificate.status !== 'REVOKED' && (
                           <button
@@ -344,6 +528,32 @@ export function CertificatesTab({ eventId }: CertificatesTabProps): JSX.Element 
                 </dd>
               </div>
               <div>
+                <dt className="text-gray-500">Email</dt>
+                <dd className="flex items-center gap-2">
+                  <Badge color={EMAIL_STATUS_COLORS[detailCertificate.emailStatus]}>
+                    {EMAIL_STATUS_LABELS[detailCertificate.emailStatus]}
+                  </Badge>
+                  {detailCertificate.emailSentAt && (
+                    <span className="text-xs text-gray-500">
+                      sent {new Date(detailCertificate.emailSentAt).toLocaleString()}
+                    </span>
+                  )}
+                  {detailCertificate.emailMessageId && (
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-brand-600 hover:text-brand-700"
+                      onClick={() => refreshTrackingMutation.mutate(detailCertificate.id)}
+                      disabled={refreshTrackingMutation.isPending}
+                    >
+                      Refresh tracking
+                    </button>
+                  )}
+                </dd>
+                {detailCertificate.emailError && (
+                  <dd className="mt-1 text-xs text-red-600">{detailCertificate.emailError}</dd>
+                )}
+              </div>
+              <div>
                 <dt className="text-gray-500">Issued</dt>
                 <dd className="font-medium text-gray-900">
                   {new Date(detailCertificate.issuedAt).toLocaleString()}
@@ -362,9 +572,14 @@ export function CertificatesTab({ eventId }: CertificatesTabProps): JSX.Element 
                 <dd className="font-medium text-gray-900">{detailCertificate.verificationCount}</dd>
               </div>
             </dl>
-            <Button onClick={() => downloadMutation.mutate(detailCertificate)} isLoading={downloadMutation.isPending}>
-              Download PDF
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={() => downloadMutation.mutate(detailCertificate)} isLoading={downloadMutation.isPending}>
+                Download PDF
+              </Button>
+              <Button variant="outline" onClick={() => copyVerifyLink(detailCertificate.certificateId)}>
+                Copy link
+              </Button>
+            </div>
           </div>
         )}
       </Modal>
