@@ -15,7 +15,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
-ENV NODE_ENV=production
 ENV PORT=4000
 
 WORKDIR /app
@@ -25,8 +24,8 @@ COPY package*.json ./
 COPY server/package*.json ./server/
 COPY server/prisma ./server/prisma/
 
-# Install dependencies
-RUN npm ci --workspace=server || (cd server && npm install)
+# Install dependencies (including devDependencies required for compilation)
+RUN cd server && npm install --include=dev
 
 # Copy server code
 COPY server ./server
@@ -36,6 +35,12 @@ WORKDIR /app/server
 # Generate Prisma Client & compile TypeScript
 RUN npx prisma generate
 RUN npm run build
+
+# Remove devDependencies after build
+RUN npm prune --omit=dev
+
+# Set NODE_ENV to production for container runtime
+ENV NODE_ENV=production
 
 # Create storage directory for uploads
 RUN mkdir -p storage/logos storage/signatures storage/certificates
