@@ -43,13 +43,12 @@ The backend uses Puppeteer for generating PDF certificates. Deploying via Docker
    | `JWT_EXPIRES_IN` | `7d` | Token duration |
    | `COOKIE_NAME` | `cf_token` | Cookie name for auth |
    | `CLIENT_URL` | `https://your-app.vercel.app` | URL of your Vercel frontend |
-   | `PUBLIC_SERVER_URL` | `https://certifyflow-backend.onrender.com` | Your Render Web Service URL |
+   | `PUBLIC_SERVER_URL` | `https://certifyflow-xs6o.onrender.com` | Your Render Web Service URL |
    | `STORAGE_DIR` | `storage` | Local directory for uploaded logos/signatures |
 
 4. **Deploy**:
    - Click **Create Web Service**.
-   - Render will build the Docker container, run `npx prisma migrate deploy`, and start the backend service at `https://<your-app-name>.onrender.com`.
-   - Copy your Render backend URL (e.g. `https://certifyflow-backend.onrender.com`).
+   - Render will build the Docker container, run `npx prisma migrate deploy`, and start the backend service at `https://certifyflow-xs6o.onrender.com`.
 
 ---
 
@@ -73,7 +72,7 @@ The backend uses Puppeteer for generating PDF certificates. Deploying via Docker
 
    | Key | Value |
    | :--- | :--- |
-   | `VITE_API_URL` | `https://certifyflow-backend.onrender.com/api` | *(Replace with your actual Render URL)* |
+   | `VITE_API_URL` | `https://certifyflow-xs6o.onrender.com/api` |
 
 4. **Deploy**:
    - Click **Deploy**.
